@@ -37,15 +37,53 @@ export interface PlayerSearchHit {
   primaryPosition?: { abbreviation?: string; name?: string };
   currentTeam?: { name?: string };
 }
-  
+
+/** Row in statcast_batting (SCHEMA.md). */
+export interface StatcastBatting {
+  id: number;
+  player_id: number | null;
+  player_name: string | null;
+  team_id: number | null;
+  season: number | null;
+  avg_exit_velocity: number | null;
+  max_exit_velocity: number | null;
+  avg_launch_angle: number | null;
+  barrel_rate: number | null;
+  hard_hit_rate: number | null;
+  xba: number | null;
+  xslg: number | null;
+  xwoba: number | null;
+  sprint_speed: number | null;
+  updated_at?: string | null;
+  /** Present when API joins players.team */
+  players?: { team: string | null } | null;
+}
+
+/** Row in statcast_pitches (SCHEMA.md). */
 export interface StatcastPitch {
-  id?: number;
-  player_id: number;
-  player_name: string;
-  game_date: string;
-  pitch_type: string;
-  release_speed: number;
-  launch_angle?: number;
-  launch_speed?: number;
-  events?: string;
+  id: number;
+  player_id: number | null;
+  player_name: string | null;
+  team_id: number | null;
+  game_date: string | null;
+  game_pk: number | null;
+  pitch_type: string | null;
+  pitch_name: string | null;
+  release_speed: number | null;
+  release_spin_rate: number | null;
+  pfx_x: number | null;
+  pfx_z: number | null;
+  plate_x: number | null;
+  plate_z: number | null;
+  launch_angle: number | null;
+  launch_speed: number | null;
+  hit_distance: number | null;
+  events: string | null;
+  description: string | null;
+  zone: number | null;
+  stand: string | null;
+  p_throws: string | null;
+  home_team: string | null;
+  away_team: string | null;
+  created_at?: string | null;
 }
