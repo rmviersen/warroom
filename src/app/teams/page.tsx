@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Team } from "@/types";
@@ -148,11 +149,12 @@ function LeagueSection({
           </h3>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {divTeams.map((team) => (
-              <article
+              <Link
                 key={team.id}
-                className="rounded-xl border border-gray-800 bg-gray-900/50 p-4 hover:border-red-900/40 hover:bg-gray-900/80 hover:shadow-lg hover:shadow-red-950/20 transition-all duration-200"
+                href={`/teams/${team.id}`}
+                className="group relative block rounded-xl border border-gray-800 bg-gray-900/50 p-4 hover:border-red-900/40 hover:bg-gray-900/80 hover:shadow-lg hover:shadow-red-950/20 transition-all duration-200"
               >
-                <p className="text-white font-semibold leading-snug">
+                <p className="text-white font-semibold leading-snug pr-24">
                   {team.name ?? "—"}
                 </p>
                 <p className="text-sm text-gray-400 mt-1">
@@ -177,7 +179,10 @@ function LeagueSection({
                     </dd>
                   </div>
                 </dl>
-              </article>
+                <span className="pointer-events-none absolute top-4 right-4 text-xs font-semibold text-red-400 opacity-0 translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0">
+                  View Team →
+                </span>
+              </Link>
             ))}
           </div>
         </div>

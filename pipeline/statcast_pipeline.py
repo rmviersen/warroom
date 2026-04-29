@@ -82,76 +82,6 @@ _TABLE_COLUMNS = [
 _INSERT_BATCH_SIZE = 500
 
 
-def _is_fk_violation(exc: BaseException) -> bool:
-    """True if the error is likely a Postgres foreign-key violation (23503)."""
-
-    try:
-        from postgrest.exceptions import APIError
-
-        if isinstance(exc, APIError):
-            if exc.code is not None and str(exc.code) == "23503":
-                return True
-            blob = f"{exc.message or ''} {exc.details or ''}".lower()
-            return "foreign key constraint" in blob
-    except Exception:
-        pass
-
-    text = str(exc).lower()
-    return "23503" in text or "foreign key constraint" in text
-
-
-def _upsert_statcast_batch_resilient(
-    client: Any,
-    batch: list[dict[str, Any]],
-    batch_index: int,
-) -> tuple[int, int, int]:
-    """
-    Upsert one batch of statcast rows.
-
-    Returns (success_count, skipped_fk_count, failed_other_count).
-
-    If the whole batch fails with an FK violation (e.g. missing ``players.id``),
-    retries row-by-row: skips rows that still violate FK and logs a warning.
-    """
-
-    table = client.table("statcast_pitches")
-    try:
-        table.upsert(batch).execute()
-        return len(batch), 0, 0
-    except Exception as exc:  # noqa: BLE001
-        if not _is_fk_violation(exc):
-            print(
-                f"upsert_statcast: batch {batch_index} failed: {exc}",
-            )
-            return 0, 0, len(batch)
-
-        print(
-            f"upsert_statcast: batch {batch_index} hit FK constraint; "
-            f"retrying {len(batch)} row(s) individually…",
-        )
-        ok = 0
-        skipped = 0
-        failed_other = 0
-        for row in batch:
-            pid = row.get("player_id")
-            try:
-                table.upsert([row]).execute()
-                ok += 1
-            except Exception as row_exc:  # noqa: BLE001
-                if _is_fk_violation(row_exc):
-                    skipped += 1
-                    print(
-                        f"upsert_statcast: warning — skip row (no players.id for "
-                        f"player_id={pid!r})",
-                    )
-                else:
-                    failed_other += 1
-                    print(
-                        f"upsert_statcast: row failed for player_id={pid!r}: {row_exc}",
-                    )
-        return ok, skipped, failed_other
-
-
 def fetch_statcast_for_date(date_str: str) -> pd.DataFrame:
     """
     Pull Statcast for a single calendar day.
@@ -246,13 +176,10 @@ def _rows_from_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
 
 def upsert_statcast(df: pd.DataFrame) -> None:
     """
-    Load cleaned Statcast rows into ``statcast_pitches``.
+    Load cleaned Statcast rows into ``statcast_pitches`` via batched upsert.
 
-    Rows referencing ``player_id`` values missing from ``players`` are skipped
-    after a per-row retry, with a warning, so one bad batter id does not fail
-    the whole batch.
-
-    Prints aggregate success, skipped (FK), and other failure counts.
+    Prints aggregate success and failure row counts (failures count full batch
+    size when a batch raises).
     """
 
     if df is None or df.empty:
@@ -261,31 +188,28 @@ def upsert_statcast(df: pd.DataFrame) -> None:
 
     client = db.get_client()
     records = _rows_from_dataframe(df)
+    table = client.table("statcast_pitches")
 
     ok = 0
-    skipped_fk = 0
-    failed_other = 0
-
+    failed = 0
     for i in range(0, len(records), _INSERT_BATCH_SIZE):
         batch = records[i : i + _INSERT_BATCH_SIZE]
-        b_ok, b_skip, b_fail = _upsert_statcast_batch_resilient(
-            client,
-            batch,
-            i // _INSERT_BATCH_SIZE + 1,
-        )
-        ok += b_ok
-        skipped_fk += b_skip
-        failed_other += b_fail
+        batch_no = i // _INSERT_BATCH_SIZE + 1
+        try:
+            table.upsert(batch).execute()
+            ok += len(batch)
+        except Exception as exc:  # noqa: BLE001
+            print(f"upsert_statcast: batch {batch_no} failed: {exc}")
+            failed += len(batch)
 
-    print(
-        f"upsert_statcast: upserted {ok} row(s); "
-        f"skipped {skipped_fk} row(s) (FK / missing player); "
-        f"failed {failed_other} row(s) (other errors).",
-    )
+    print(f"upsert_statcast: upserted {ok} row(s); failed {failed} row(s).")
 
 
-def run_pipeline_for_date(date_str: str) -> None:
-    """Fetch, clean, and load Statcast data for ``date_str`` (``YYYY-MM-DD``)."""
+def run_pipeline_for_date(date_str: str) -> int:
+    """Fetch, clean, and load Statcast data for ``date_str`` (``YYYY-MM-DD``).
+
+    Returns the number of cleaned rows passed to upsert (0 if none).
+    """
 
     day = date_str.strip()
     print(f"[statcast] pipeline start (date={day})")
@@ -297,6 +221,7 @@ def run_pipeline_for_date(date_str: str) -> None:
 
     upsert_statcast(cleaned)
     print("[statcast] pipeline finished")
+    return len(cleaned)
 
 
 def run_pipeline() -> None:

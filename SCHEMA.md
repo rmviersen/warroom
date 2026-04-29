@@ -34,9 +34,10 @@ CREATE TABLE teams (
 );
 
 -- Statcast pitches table
+-- player_id: MLBAM id; soft reference to players.id (no FK). Use for joins when a players row exists.
 CREATE TABLE statcast_pitches (
   id BIGSERIAL PRIMARY KEY,
-  player_id BIGINT REFERENCES players(id),
+  player_id BIGINT,
   player_name TEXT,
   team_id BIGINT,
   game_date DATE,
@@ -62,13 +63,15 @@ CREATE TABLE statcast_pitches (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Statcast batting leaderboard table
+-- Statcast batting leaderboard table (``pa``: Savant attempts / expected-stats PA; see SCHEMA migration note)
+-- player_id: soft reference to players.id (no FK), same as statcast_pitches
 CREATE TABLE statcast_batting (
   id BIGSERIAL PRIMARY KEY,
-  player_id BIGINT REFERENCES players(id),
+  player_id BIGINT,
   player_name TEXT,
   team_id BIGINT,
   season INTEGER,
+  pa INTEGER,
   avg_exit_velocity NUMERIC,
   max_exit_velocity NUMERIC,
   avg_launch_angle NUMERIC,
@@ -120,6 +123,20 @@ ALTER TABLE statcast_batting ADD CONSTRAINT fk_statcast_batting_team
   FOREIGN KEY (team_id) REFERENCES teams(id);
 
 -- ==============================================
+-- Drop player_id FK (existing databases)
+-- ==============================================
+-- New installs: omit REFERENCES on player_id in CREATE TABLE above.
+-- Existing Supabase DBs that still have the old FK:
+
+```sql
+ALTER TABLE public.statcast_pitches
+  DROP CONSTRAINT IF EXISTS statcast_pitches_player_id_fkey;
+
+ALTER TABLE public.statcast_batting
+  DROP CONSTRAINT IF EXISTS statcast_batting_player_id_fkey;
+```
+
+-- ==============================================
 -- Indexes
 -- ==============================================
 
@@ -129,6 +146,21 @@ CREATE INDEX idx_statcast_pitches_game_date ON statcast_pitches(game_date);
 CREATE INDEX idx_statcast_batting_player_id ON statcast_batting(player_id);
 CREATE INDEX idx_statcast_batting_season ON statcast_batting(season);
 CREATE INDEX idx_game_logs_game_date ON game_logs(game_date);
+
+## ``statcast_pitches`` / ``statcast_batting`` ``player_id``
+
+``player_id`` is the MLBAM batter id. It is **not** an enforced foreign key to ``players.id`` in Supabase; values may exist before a matching ``players`` row. Treat it as a **soft reference** for optional joins (e.g. ``LEFT JOIN players ON players.id = statcast_pitches.player_id``).
+
+## statcast_batting ``pa`` column (migration)
+
+For databases created before ``pa`` was added, run in Supabase SQL editor:
+
+```sql
+ALTER TABLE public.statcast_batting
+  ADD COLUMN IF NOT EXISTS pa INTEGER;
+```
+
+- ``pa`` is populated by ``pipeline/seed_statcast_batting.py``: primary weight from Savant exit-velo / barrels **attempts**, fallback to expected-stats **pa**.
 
 -- ==============================================
 -- Row Level Security
@@ -180,3 +212,39 @@ CREATE POLICY "Public can read game logs"
 CREATE UNIQUE INDEX IF NOT EXISTS statcast_batting_player_id_season_key
   ON statcast_batting (player_id, season);
 ```
+## Real-Time Configuration
+
+The following tables are added to the Supabase real-time publication
+to enable live updates in the frontend during games:
+
+```sql
+-- Enable real-time on Statcast tables (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'statcast_pitches'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.statcast_pitches;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'statcast_batting'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.statcast_batting;
+  END IF;
+END $$;
+```
+
+### Real-Time Behavior
+- `statcast_pitches` — triggers the LIVE badge and toast notification 
+  on the Statcast explorer page
+- `statcast_batting` — triggers leaderboard refetch when aggregated 
+  batting metrics are updated by the pipeline
+- The existing RLS SELECT policy on both tables covers real-time events
+- The frontend uses the anon key for subscriptions

@@ -17,6 +17,13 @@ function toNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function toInt(v: unknown): number | null {
+  const n = toNum(v);
+  if (n == null) return null;
+  const i = Math.trunc(n);
+  return i >= 0 ? i : null;
+}
+
 function mapStatcastBattingRow(row: Record<string, unknown>): StatcastBatting {
   return {
     id: toNum(row.id) ?? 0,
@@ -25,6 +32,7 @@ function mapStatcastBattingRow(row: Record<string, unknown>): StatcastBatting {
       row.player_name == null ? null : String(row.player_name),
     team_id: toNum(row.team_id),
     season: toNum(row.season),
+    pa: toInt(row.pa),
     avg_exit_velocity: toNum(row.avg_exit_velocity),
     max_exit_velocity: toNum(row.max_exit_velocity),
     avg_launch_angle: toNum(row.avg_launch_angle),

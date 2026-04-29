@@ -2,7 +2,9 @@
 Seed ``statcast_batting`` (SCHEMA.md) from pybaseball Savant leaderboards.
 
 Merges season-level exit velocity / barrels, sprint speed, and expected stats
-on ``player_id`` (MLBAM), then upserts into Supabase.
+on ``player_id`` (MLBAM). ``pa`` is coalesced from the exit-velo leaderboard
+``attempts`` (qualifying batted-ball events) and expected-stats ``pa`` for
+PA-weighted team aggregates in the app.
 
 Requires a unique constraint on ``(player_id, season)`` for PostgREST upsert, e.g.::
 
@@ -37,6 +39,19 @@ def _fetch_frames(season: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame
     return exit_barrel, expected, sprint
 
 
+def _exit_velo_pa_column(df: pd.DataFrame) -> str | None:
+    """
+    Savant exit-velo / barrels leaderboard uses ``attempts`` (qualifying BBE);
+    some seasons may expose ``pa``. Prefer attempts for weights.
+    """
+
+    if "attempts" in df.columns:
+        return "attempts"
+    if "pa" in df.columns:
+        return "pa"
+    return None
+
+
 def _merge_leaderboards(
     exit_barrel: pd.DataFrame,
     expected: pd.DataFrame,
@@ -45,17 +60,20 @@ def _merge_leaderboards(
 ) -> pd.DataFrame:
     """Outer-merge on ``player_id`` and map to SCHEMA column names."""
 
-    ev = exit_barrel[
-        [
-            "player_id",
-            _NAME_COL,
-            "avg_hit_speed",
-            "max_hit_speed",
-            "avg_hit_angle",
-            "brl_percent",
-            "ev95percent",
-        ]
-    ].rename(
+    pa_ev_col = _exit_velo_pa_column(exit_barrel)
+    ev_cols: list[str] = [
+        "player_id",
+        _NAME_COL,
+        "avg_hit_speed",
+        "max_hit_speed",
+        "avg_hit_angle",
+        "brl_percent",
+        "ev95percent",
+    ]
+    if pa_ev_col:
+        ev_cols.insert(2, pa_ev_col)
+
+    ev = exit_barrel[ev_cols].rename(
         columns={
             _NAME_COL: "player_name",
             "avg_hit_speed": "avg_exit_velocity",
@@ -65,16 +83,22 @@ def _merge_leaderboards(
             "ev95percent": "hard_hit_rate",
         },
     )
+    if pa_ev_col:
+        ev = ev.rename(columns={pa_ev_col: "pa_exit"})
+    else:
+        ev["pa_exit"] = np.nan
 
     ex = expected[
         [
             "player_id",
+            "pa",
             "est_ba",
             "est_slg",
             "est_woba",
         ]
     ].rename(
         columns={
+            "pa": "pa_expected",
             "est_ba": "xba",
             "est_slg": "xslg",
             "est_woba": "xwoba",
@@ -87,6 +111,13 @@ def _merge_leaderboards(
     m = m.merge(sp, on="player_id", how="outer")
     m["season"] = season
     m = m.drop_duplicates(subset=["player_id"], keep="first")
+
+    pe = pd.to_numeric(m["pa_exit"], errors="coerce")
+    px = pd.to_numeric(m["pa_expected"], errors="coerce")
+    m["pa"] = pe.where(pe.notna(), px)
+    m["pa"] = pd.to_numeric(m["pa"], errors="coerce").round()
+    m["pa"] = m["pa"].astype("Int64")
+    m = m.drop(columns=["pa_exit", "pa_expected"], errors="ignore")
 
     # Normalize player_id to nullable int (outer merge can introduce NaN)
     m["player_id"] = pd.to_numeric(m["player_id"], errors="coerce").astype("Int64")
@@ -169,11 +200,28 @@ def _row_to_supabase(rec: dict[str, Any]) -> dict[str, Any] | None:
     if season_i is None:
         return None
 
+    def as_int(v: Any) -> int | None:
+        if v is None:
+            return None
+        try:
+            if pd.isna(v):
+                return None
+        except (TypeError, ValueError):
+            pass
+        if isinstance(v, (float, np.floating)) and math.isnan(float(v)):
+            return None
+        try:
+            n = int(round(float(v)))
+            return n if n >= 0 else None
+        except (TypeError, ValueError):
+            return None
+
     return {
         "player_id": int(pid),
         "player_name": name,
         "team_id": team_id,
         "season": season_i,
+        "pa": as_int(rec.get("pa")),
         "avg_exit_velocity": num(rec.get("avg_exit_velocity")),
         "max_exit_velocity": num(rec.get("max_exit_velocity")),
         "avg_launch_angle": num(rec.get("avg_launch_angle")),

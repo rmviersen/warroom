@@ -20,6 +20,91 @@ export interface Team {
   venue?: string | null;
 }
 
+/** Team hitting line for GET /api/teams/[id] (season totals). */
+export interface TeamSeasonHittingSummary {
+  avg: string | null;
+  ops: string | null;
+  homeRuns: number | null;
+  rbi: number | null;
+  runs: number | null;
+}
+
+/** Team pitching line for GET /api/teams/[id] (season totals). */
+export interface TeamSeasonPitchingSummary {
+  era: string | null;
+  whip: string | null;
+  strikeOuts: number | null;
+  baseOnBalls: number | null;
+  saves: number | null;
+}
+
+/** Parsed MLB team season stats. */
+export interface TeamSeasonStats {
+  season: number;
+  hitting: TeamSeasonHittingSummary | null;
+  pitching: TeamSeasonPitchingSummary | null;
+}
+
+/** Roster position bucket for sorting / filtering. */
+export type TeamRosterPositionGroup =
+  | "pitchers"
+  | "catchers"
+  | "infielders"
+  | "outfielders"
+  | "dh"
+  | "other";
+
+/** One active roster player from GET /api/teams/[id]. */
+export interface TeamRosterPlayer {
+  playerId: number;
+  fullName: string;
+  jerseyNumber: string | null;
+  positionAbbrev: string | null;
+  positionName: string | null;
+  positionCode: string | null;
+  positionGroup: TeamRosterPositionGroup;
+  batSide: string | null;
+  pitchHand: string | null;
+}
+
+/** GET /api/teams/[id] JSON body. */
+export interface TeamDetailApiResponse {
+  team: Record<string, unknown>;
+  roster: TeamRosterPlayer[];
+  stats: TeamSeasonStats | null;
+}
+
+/** Aggregated Statcast batting metrics for a team (season). */
+export interface TeamStatcastAggregates {
+  season: number;
+  /** Sum of player ``pa`` weights (Savant attempts / expected PA) for rows with pa > 0. */
+  total_pa: number;
+  avg_exit_velocity: number | null;
+  max_exit_velocity: number | null;
+  avg_launch_angle: number | null;
+  barrel_rate: number | null;
+  hard_hit_rate: number | null;
+  avg_xwoba: number | null;
+  avg_sprint_speed: number | null;
+}
+
+/** One row in top-by-exit-velo list from GET /api/teams/[id]/statcast. */
+export interface TeamStatcastTopPlayer {
+  player_id: number;
+  player_name: string | null;
+  pa: number | null;
+  avg_exit_velocity: number | null;
+  barrel_rate: number | null;
+  xwoba: number | null;
+}
+
+/** GET /api/teams/[id]/statcast JSON body. */
+export interface TeamStatcastApiResponse {
+  teamStatcast: TeamStatcastAggregates | null;
+  topPlayers: TeamStatcastTopPlayer[];
+  playerCount: number;
+}
+
 /** Single team row for standings tables on the dashboard. */
 export interface StandingRow {
   teamName: string;
@@ -99,6 +184,8 @@ export interface StatcastBatting {
   player_name: string | null;
   team_id: number | null;
   season: number | null;
+  /** Plate appearances / qualifying attempts (see SCHEMA.md); used for team weighting. */
+  pa: number | null;
   avg_exit_velocity: number | null;
   max_exit_velocity: number | null;
   avg_launch_angle: number | null;
