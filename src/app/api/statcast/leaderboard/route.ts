@@ -17,6 +17,24 @@ function isLeaderboardStat(s: string): s is LeaderboardStatParam {
   return s in STAT_COLUMNS;
 }
 
+type BattingRow = {
+  id: number;
+  player_id: number | null;
+  player_name: string | null;
+  team_id: number | null;
+  season: number | null;
+  avg_exit_velocity: number | null;
+  max_exit_velocity: number | null;
+  avg_launch_angle: number | null;
+  barrel_rate: number | null;
+  hard_hit_rate: number | null;
+  xba: number | null;
+  xslg: number | null;
+  xwoba: number | null;
+  sprint_speed: number | null;
+  updated_at: string | null;
+};
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -70,8 +88,7 @@ export async function GET(request: Request) {
         xslg,
         xwoba,
         sprint_speed,
-        updated_at,
-        players ( team )
+        updated_at
       `,
       )
       .eq("season", season)
@@ -87,8 +104,56 @@ export async function GET(request: Request) {
       );
     }
 
+    const rows = (data ?? []) as BattingRow[];
+    const teamIdNums = [
+      ...new Set(
+        rows
+          .map((r) => r.team_id)
+          .filter(
+            (id): id is number =>
+              id != null && Number.isFinite(Number(id)),
+          )
+          .map((id) => Number(id)),
+      ),
+    ];
+
+    const abbrevByTeamId = new Map<number, string>();
+
+    if (teamIdNums.length > 0) {
+      const { data: teamRows, error: teamErr } = await supabase
+        .from("teams")
+        .select("id, abbreviation")
+        .in("id", teamIdNums);
+
+      if (teamErr) {
+        console.error("statcast leaderboard teams:", teamErr);
+      } else {
+        for (const t of teamRows ?? []) {
+          const tid = t.id != null ? Number(t.id) : null;
+          const abbr = t.abbreviation?.trim();
+          if (tid != null && Number.isFinite(tid) && abbr) {
+            abbrevByTeamId.set(tid, abbr);
+          }
+        }
+      }
+    }
+
+    const leaderboard = rows.map((row) => {
+      const tid =
+        row.team_id != null && Number.isFinite(Number(row.team_id))
+          ? Number(row.team_id)
+          : null;
+      const abbr = tid != null ? abbrevByTeamId.get(tid) : undefined;
+      const team_display = abbr ?? "—";
+
+      return {
+        ...row,
+        team_display,
+      };
+    });
+
     return NextResponse.json({
-      leaderboard: data ?? [],
+      leaderboard,
       stat: statParam,
       season,
     });

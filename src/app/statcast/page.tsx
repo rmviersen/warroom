@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { StatcastBatting } from "@/types";
+import type { StatcastBattingLeaderboardRow } from "@/types";
 
 export type LeaderboardStat =
   | "exit_velocity"
@@ -12,9 +12,7 @@ export type LeaderboardStat =
   | "sprint_speed"
   | "xwoba";
 
-type LeaderboardRow = StatcastBatting & {
-  players?: { team: string | null } | null;
-};
+type LeaderboardRow = StatcastBattingLeaderboardRow;
 
 const STAT_OPTIONS: { value: LeaderboardStat; label: string; column: string }[] = [
   { value: "exit_velocity", label: "Exit Velocity", column: "Avg EV" },
@@ -89,7 +87,7 @@ export default function StatcastPage() {
         return;
       }
       const data = (await res.json()) as {
-        leaderboard?: LeaderboardRow[];
+        leaderboard?: StatcastBattingLeaderboardRow[];
       };
       setRows(data.leaderboard ?? []);
     } catch {
@@ -203,7 +201,7 @@ export default function StatcastPage() {
                         {row.player_name ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-gray-400">
-                        {row.players?.team ?? "—"}
+                        {row.team_display}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-200 tabular-nums font-mono">
                         {formatStatValue(stat, row)}

@@ -96,6 +96,39 @@ def _merge_leaderboards(
     return m
 
 
+def _fill_team_id_from_players(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Coalesce ``team_id`` with ``players.team_id`` for rows missing MLB team id.
+
+    Sprint leaderboard supplies ``team_id`` for many batters; exit / expected
+    merges leave others null until filled from Seed ``players``.
+    """
+
+    df = df.copy()
+    client = get_client()
+    pids = df["player_id"].dropna().astype(int).unique().tolist()
+    id_to_tid: dict[int, int | None] = {}
+
+    chunk = 500
+    for i in range(0, len(pids), chunk):
+        batch = pids[i : i + chunk]
+        resp = client.table("players").select("id, team_id").in_("id", batch).execute()
+        for r in resp.data or []:
+            pid = r.get("id")
+            if pid is None:
+                continue
+            tid = r.get("team_id")
+            id_to_tid[int(pid)] = int(tid) if tid is not None else None
+
+    current = pd.to_numeric(df["team_id"], errors="coerce")
+    fallback = df["player_id"].map(
+        lambda x: id_to_tid.get(int(x)) if pd.notna(x) else None,
+    )
+    coalesced = current.where(~current.isna(), fallback)
+    df["team_id"] = coalesced.map(lambda x: int(x) if pd.notna(x) else None)
+    return df
+
+
 def _row_to_supabase(rec: dict[str, Any]) -> dict[str, Any] | None:
     """Build one insert row; skip if ``player_id`` missing."""
 
@@ -180,6 +213,7 @@ def main() -> None:
 
     exit_df, exp_df, spr_df = _fetch_frames(season)
     merged = _merge_leaderboards(exit_df, exp_df, spr_df, season)
+    merged = _fill_team_id_from_players(merged)
 
     records: list[dict[str, Any]] = []
     for _, row in merged.iterrows():

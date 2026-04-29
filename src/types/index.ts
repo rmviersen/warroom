@@ -55,8 +55,12 @@ export interface StatcastBatting {
   xwoba: number | null;
   sprint_speed: number | null;
   updated_at?: string | null;
-  /** Present when API joins players.team */
-  players?: { team: string | null } | null;
+}
+
+/** GET /api/statcast/leaderboard row: batting row + resolved team abbreviation. */
+export interface StatcastBattingLeaderboardRow extends StatcastBatting {
+  /** Teams.abbreviation when team_id resolves; otherwise "—". */
+  team_display: string;
 }
 
 /** Row in statcast_pitches (SCHEMA.md). */
