@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 
 import type { PlayerSearchHit } from "@/types";
@@ -123,29 +124,31 @@ export default function PlayersPage() {
       {!loading && players.length > 0 ? (
         <ul className="space-y-2">
           {players.map((p) => (
-            <li
-              key={p.id}
-              className="rounded-xl border border-gray-800 bg-gray-900/50 px-4 py-4 hover:border-gray-700 transition-colors"
-            >
-              <p className="text-white font-medium">
-                {p.fullName ?? "Unknown player"}
-              </p>
-              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-                <span>
-                  Team:{" "}
-                  <span className="text-gray-300">
-                    {p.currentTeam?.name ?? "—"}
+            <li key={p.id}>
+              <Link
+                href={`/players/${p.id}`}
+                className="block rounded-xl border border-gray-800 bg-gray-900/50 px-4 py-4 hover:border-red-900/40 hover:bg-gray-900/70 transition-colors"
+              >
+                <p className="text-white font-medium">
+                  {p.fullName ?? "Unknown player"}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                  <span>
+                    Team:{" "}
+                    <span className="text-gray-300">
+                      {p.currentTeam?.name ?? "—"}
+                    </span>
                   </span>
-                </span>
-                <span>
-                  Position:{" "}
-                  <span className="text-gray-300 font-mono">
-                    {p.primaryPosition?.abbreviation ??
-                      p.primaryPosition?.name ??
-                      "—"}
+                  <span>
+                    Position:{" "}
+                    <span className="text-gray-300 font-mono">
+                      {p.primaryPosition?.abbreviation ??
+                        p.primaryPosition?.name ??
+                        "—"}
+                    </span>
                   </span>
-                </span>
-              </div>
+                </div>
+              </Link>
             </li>
           ))}
         </ul>

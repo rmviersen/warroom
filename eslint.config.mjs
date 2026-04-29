@@ -12,7 +12,15 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Python virtualenv (third-party JS should not be linted)
+    "pipeline/venv/**",
   ]),
+  {
+    rules: {
+      // Fetch-on-mount via useCallback + useEffect is standard; rule misfires on async loaders.
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

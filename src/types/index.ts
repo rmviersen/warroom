@@ -38,6 +38,60 @@ export interface PlayerSearchHit {
   currentTeam?: { name?: string };
 }
 
+/** Season hitting line from MLB Stats API ``stats[].splits[].stat``. */
+export interface MlbSeasonHittingLine {
+  gamesPlayed?: number | null;
+  atBats?: number | null;
+  runs?: number | null;
+  hits?: number | null;
+  doubles?: number | null;
+  triples?: number | null;
+  homeRuns?: number | null;
+  rbi?: number | null;
+  baseOnBalls?: number | null;
+  strikeOuts?: number | null;
+  stolenBases?: number | null;
+  avg?: string | null;
+  obp?: string | null;
+  slg?: string | null;
+  ops?: string | null;
+}
+
+/** Season pitching line from MLB Stats API ``stats[].splits[].stat``. */
+export interface MlbSeasonPitchingLine {
+  gamesPlayed?: number | null;
+  gamesStarted?: number | null;
+  wins?: number | null;
+  losses?: number | null;
+  saves?: number | null;
+  inningsPitched?: string | null;
+  earnedRuns?: number | null;
+  era?: string | null;
+  strikeOuts?: number | null;
+  baseOnBalls?: number | null;
+  whip?: string | null;
+}
+
+/** Parsed MLB season stats for GET /api/players/[id]. */
+export interface PlayerProfileMlbStats {
+  season: number;
+  isPitcherPrimary: boolean;
+  hitting: MlbSeasonHittingLine | null;
+  pitching: MlbSeasonPitchingLine | null;
+}
+
+/** GET /api/players/[id] JSON body. */
+export interface PlayerProfileApiResponse {
+  player: Record<string, unknown> | null;
+  mlbStats: PlayerProfileMlbStats | null;
+  statcastBatting: StatcastBatting | null;
+}
+
+/** GET /api/players/[id]/pitches JSON body. */
+export interface PlayerProfilePitchesApiResponse {
+  pitches: StatcastPitch[];
+}
+
 /** Row in statcast_batting (SCHEMA.md). */
 export interface StatcastBatting {
   id: number;
