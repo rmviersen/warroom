@@ -5,8 +5,12 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import type {
+  PlayerBattingSeasonRow,
+  PlayerFieldingSeasonRow,
+  PlayerPitchingSeasonRow,
   PlayerProfileApiResponse,
   PlayerProfilePitchesApiResponse,
+  PlayerRow,
   StatcastPitch,
 } from "@/types";
 
@@ -68,6 +72,285 @@ function formatPercentish(v: number | null): string {
   const p = normalizePercent(v);
   if (p == null) return "—";
   return `${p.toFixed(1)}%`;
+}
+
+function supabaseBioHasDisplayData(row: PlayerRow | null): boolean {
+  if (!row) return false;
+  const pieces = [
+    row.debut_date,
+    row.final_game,
+    row.birth_date,
+    row.name_first,
+    row.name_last,
+    row.birth_city,
+    row.birth_country,
+    row.height,
+    row.weight,
+    row.jersey_number,
+    row.bats,
+    row.throws,
+  ];
+  return pieces.some(
+    (v) => v != null && v !== "" && (typeof v !== "number" || !Number.isNaN(v)),
+  );
+}
+
+function DatabaseBioPanel({ row }: { row: PlayerRow }) {
+  const rows: { label: string; value: string }[] = [];
+  const push = (label: string, value: string | null | undefined) => {
+    if (value == null || value === "") return;
+    rows.push({ label, value: String(value) });
+  };
+
+  if (row.name_first || row.name_last) {
+    push(
+      "Name",
+      [row.name_first, row.name_last].filter(Boolean).join(" ") || "—",
+    );
+  }
+  push("Birth date", row.birth_date);
+  push("Birthplace", [row.birth_city, row.birth_country].filter(Boolean).join(", ") || null);
+  push("Debut", row.debut_date);
+  push("Final game", row.final_game);
+  push("Height", row.height);
+  push("Weight", row.weight != null ? `${row.weight} lb` : null);
+  push("Bats / throws", [row.bats, row.throws].filter(Boolean).join(" / ") || null);
+  push("Jersey", row.jersey_number);
+  if (row.active != null) {
+    push("Roster status (DB)", row.active ? "Active" : "Inactive");
+  }
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-800 bg-gray-950/50">
+        <h2 className="text-sm font-semibold text-white">Bio · database</h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          From your Supabase players row (historical / roster cache).
+        </p>
+      </div>
+      <table className="w-full text-sm">
+        <tbody>
+          {rows.map((r) => (
+            <tr
+              key={r.label}
+              className="border-t border-gray-800/80 first:border-t-0"
+            >
+              <th
+                scope="row"
+                className="py-3 px-4 text-left font-medium text-gray-400 w-2/5"
+              >
+                {r.label}
+              </th>
+              <td className="py-3 px-4 text-right text-gray-200">{r.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function fmtSlash(n: number | null | undefined, digits: number): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  return n.toFixed(digits);
+}
+
+function HistoricalSeasonsSection({
+  batting,
+  pitching,
+  fielding,
+}: {
+  batting: PlayerBattingSeasonRow[];
+  pitching: PlayerPitchingSeasonRow[];
+  fielding: PlayerFieldingSeasonRow[];
+}) {
+  if (batting.length === 0 && pitching.length === 0 && fielding.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="space-y-5">
+      <div>
+        <h2 className="text-sm font-semibold text-white">
+          Historical seasons · database
+        </h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Season totals from Supabase (newest year first).
+        </p>
+      </div>
+
+      {batting.length > 0 ? (
+        <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
+          <div className="px-4 py-2 border-b border-gray-800 bg-gray-950/50 text-xs font-medium text-gray-400">
+            Batting
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs min-w-[640px]">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-800">
+                  <th className="py-2 px-3 font-medium">Year</th>
+                  <th className="py-2 px-3 font-medium">Team</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">PA</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">AVG</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">OBP</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">SLG</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">OPS</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">HR</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">wRC+</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">WAR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batting.map((r) => (
+                  <tr
+                    key={`${r.id}-bat`}
+                    className="border-b border-gray-800/80 text-gray-200"
+                  >
+                    <td className="py-2 px-3 font-mono">{r.season}</td>
+                    <td className="py-2 px-3 max-w-[140px] truncate">
+                      {r.team ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {r.pa ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.avg, 3)}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.obp, 3)}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.slg, 3)}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.ops, 3)}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {r.hr ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {r.wrc_plus ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.war, 1)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {pitching.length > 0 ? (
+        <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
+          <div className="px-4 py-2 border-b border-gray-800 bg-gray-950/50 text-xs font-medium text-gray-400">
+            Pitching
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs min-w-[600px]">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-800">
+                  <th className="py-2 px-3 font-medium">Year</th>
+                  <th className="py-2 px-3 font-medium">Team</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">IP</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">ERA</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">WHIP</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">SO</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">BB</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">FIP</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">WAR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pitching.map((r) => (
+                  <tr
+                    key={`${r.id}-pit`}
+                    className="border-b border-gray-800/80 text-gray-200"
+                  >
+                    <td className="py-2 px-3 font-mono">{r.season}</td>
+                    <td className="py-2 px-3 max-w-[140px] truncate">
+                      {r.team ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.ip, 1)}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.era, 2)}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.whip, 3)}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {r.so ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {r.bb ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.fip, 2)}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.war, 1)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {fielding.length > 0 ? (
+        <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
+          <div className="px-4 py-2 border-b border-gray-800 bg-gray-950/50 text-xs font-medium text-gray-400">
+            Fielding
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs min-w-[520px]">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-800">
+                  <th className="py-2 px-3 font-medium">Year</th>
+                  <th className="py-2 px-3 font-medium">Team</th>
+                  <th className="py-2 px-3 font-medium">Pos</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">Inn</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">DRS</th>
+                  <th className="py-2 px-3 font-mono tabular-nums">OAA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fielding.map((r) => (
+                  <tr
+                    key={`${r.id}-fld`}
+                    className="border-b border-gray-800/80 text-gray-200"
+                  >
+                    <td className="py-2 px-3 font-mono">{r.season}</td>
+                    <td className="py-2 px-3 max-w-[140px] truncate">
+                      {r.team ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 font-mono">
+                      {r.position ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {fmtSlash(r.inn, 1)}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {r.drs ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 font-mono tabular-nums">
+                      {r.oaa ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 function PersonHeader({
@@ -412,6 +695,17 @@ export default function PlayerProfilePage() {
       {!loading && !error && profile ? (
         <>
           <PersonHeader player={profile.player} />
+
+          {profile.supabasePlayer &&
+          supabaseBioHasDisplayData(profile.supabasePlayer) ? (
+            <DatabaseBioPanel row={profile.supabasePlayer} />
+          ) : null}
+
+          <HistoricalSeasonsSection
+            batting={profile.historicalBatting ?? []}
+            pitching={profile.historicalPitching ?? []}
+            fielding={profile.historicalFielding ?? []}
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
             <section className="space-y-3">

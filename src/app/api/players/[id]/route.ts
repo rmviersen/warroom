@@ -3,7 +3,14 @@ import { NextResponse } from "next/server";
 import { mlbFetch } from "@/lib/mlb-api";
 import { parseMlbPlayerSeasonStats } from "@/lib/mlb-player-stats";
 import { supabase } from "@/lib/supabase";
-import type { PlayerProfileApiResponse, StatcastBatting } from "@/types";
+import type {
+  PlayerProfileApiResponse,
+  StatcastBatting,
+  PlayerRow,
+  PlayerBattingSeasonRow,
+  PlayerPitchingSeasonRow,
+  PlayerFieldingSeasonRow,
+} from "@/types";
 
 function parsePlayerId(raw: string): number | null {
   const n = Number(raw);
@@ -22,6 +29,38 @@ function toInt(v: unknown): number | null {
   if (n == null) return null;
   const i = Math.trunc(n);
   return i >= 0 ? i : null;
+}
+
+function mapPlayersRow(row: Record<string, unknown>): PlayerRow {
+  return {
+    id: toNum(row.id) ?? 0,
+    full_name: row.full_name == null ? "" : String(row.full_name),
+    team: row.team == null ? null : String(row.team),
+    team_id: toNum(row.team_id),
+    position: row.position == null ? null : String(row.position),
+    jersey_number:
+      row.jersey_number == null ? null : String(row.jersey_number),
+    bats: row.bats == null ? null : String(row.bats),
+    throws: row.throws == null ? null : String(row.throws),
+    birth_date: row.birth_date == null ? null : String(row.birth_date),
+    debut_date: row.debut_date == null ? null : String(row.debut_date),
+    final_game: row.final_game == null ? null : String(row.final_game),
+    name_first: row.name_first == null ? null : String(row.name_first),
+    name_last: row.name_last == null ? null : String(row.name_last),
+    birth_city: row.birth_city == null ? null : String(row.birth_city),
+    birth_country:
+      row.birth_country == null ? null : String(row.birth_country),
+    height: row.height == null ? null : String(row.height),
+    weight: toInt(row.weight),
+    active:
+      row.active === null || row.active === undefined
+        ? null
+        : Boolean(row.active),
+    created_at:
+      row.created_at == null ? null : String(row.created_at),
+    updated_at:
+      row.updated_at == null ? null : String(row.updated_at),
+  };
 }
 
 function mapStatcastBattingRow(row: Record<string, unknown>): StatcastBatting {
@@ -61,7 +100,38 @@ export async function GET(
 
   try {
     const endpoint = `/people/${playerId}?hydrate=stats(group=[hitting,pitching,fielding],type=[season]),currentTeam`;
-    const mlbJson = (await mlbFetch(endpoint)) as { people?: unknown[] };
+    const [
+      mlbJson,
+      sbResult,
+      plResult,
+      batHist,
+      pitHist,
+      fldHist,
+    ] = await Promise.all([
+      mlbFetch(endpoint) as Promise<{ people?: unknown[] }>,
+      supabase
+        .from("statcast_batting")
+        .select("*")
+        .eq("player_id", playerId)
+        .eq("season", season)
+        .maybeSingle(),
+      supabase.from("players").select("*").eq("id", playerId).maybeSingle(),
+      supabase
+        .from("player_batting_seasons")
+        .select("*")
+        .eq("player_id", playerId)
+        .order("season", { ascending: false }),
+      supabase
+        .from("player_pitching_seasons")
+        .select("*")
+        .eq("player_id", playerId)
+        .order("season", { ascending: false }),
+      supabase
+        .from("player_fielding_seasons")
+        .select("*")
+        .eq("player_id", playerId)
+        .order("season", { ascending: false }),
+    ]);
 
     const people = mlbJson.people;
     const person =
@@ -87,27 +157,42 @@ export async function GET(
       primaryPositionCode,
     );
 
-    const { data: sbRow, error: sbError } = await supabase
-      .from("statcast_batting")
-      .select("*")
-      .eq("player_id", playerId)
-      .eq("season", season)
-      .maybeSingle();
-
-    if (sbError) {
-      console.error("statcast_batting:", sbError.message);
+    if (sbResult.error) {
+      console.error("statcast_batting:", sbResult.error.message);
       return NextResponse.json(
         { error: "Failed to load Statcast batting data" },
         { status: 500 },
       );
     }
 
+    if (plResult.error) {
+      console.error("players:", plResult.error.message);
+    }
+
+    if (batHist.error) {
+      console.error("player_batting_seasons:", batHist.error.message);
+    }
+    if (pitHist.error) {
+      console.error("player_pitching_seasons:", pitHist.error.message);
+    }
+    if (fldHist.error) {
+      console.error("player_fielding_seasons:", fldHist.error.message);
+    }
+
+    const supabasePlayer = plResult.data
+      ? mapPlayersRow(plResult.data as Record<string, unknown>)
+      : null;
+
     const body: PlayerProfileApiResponse = {
       player: person,
       mlbStats,
-      statcastBatting: sbRow
-        ? mapStatcastBattingRow(sbRow as Record<string, unknown>)
+      statcastBatting: sbResult.data
+        ? mapStatcastBattingRow(sbResult.data as Record<string, unknown>)
         : null,
+      supabasePlayer,
+      historicalBatting: (batHist.data ?? []) as PlayerBattingSeasonRow[],
+      historicalPitching: (pitHist.data ?? []) as PlayerPitchingSeasonRow[],
+      historicalFielding: (fldHist.data ?? []) as PlayerFieldingSeasonRow[],
     };
 
     return NextResponse.json(body);

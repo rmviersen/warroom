@@ -13,6 +13,14 @@ CREATE TABLE players (
   bats TEXT,
   throws TEXT,
   birth_date DATE,
+  debut_date DATE,
+  final_game DATE,
+  name_first TEXT,
+  name_last TEXT,
+  birth_city TEXT,
+  birth_country TEXT,
+  height TEXT,
+  weight INTEGER,
   active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -113,6 +121,212 @@ CREATE TABLE social_posts (
 );
 
 -- ==============================================
+-- Historical stats (player / team season totals)
+-- player_id / team_id: MLBAM-aligned soft references (no FK required).
+-- ==============================================
+
+CREATE TABLE player_batting_seasons (
+  id BIGSERIAL PRIMARY KEY,
+  player_id BIGINT NOT NULL,
+  player_name TEXT,
+  season INTEGER NOT NULL,
+  team_id BIGINT,
+  team TEXT,
+  league TEXT,
+  g INTEGER,
+  ab INTEGER,
+  pa INTEGER,
+  r INTEGER,
+  h INTEGER,
+  doubles INTEGER,
+  triples INTEGER,
+  hr INTEGER,
+  rbi INTEGER,
+  sb INTEGER,
+  cs INTEGER,
+  bb INTEGER,
+  so INTEGER,
+  avg NUMERIC(5,3),
+  obp NUMERIC(5,3),
+  slg NUMERIC(5,3),
+  ops NUMERIC(5,3),
+  babip NUMERIC(5,3),
+  iso NUMERIC(5,3),
+  bb_pct NUMERIC(5,1),
+  k_pct NUMERIC(5,1),
+  ops_plus INTEGER,
+  woba NUMERIC(5,3),
+  wrc_plus INTEGER,
+  war NUMERIC(5,1),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE player_pitching_seasons (
+  id BIGSERIAL PRIMARY KEY,
+  player_id BIGINT NOT NULL,
+  player_name TEXT,
+  season INTEGER NOT NULL,
+  team_id BIGINT,
+  team TEXT,
+  league TEXT,
+  w INTEGER,
+  l INTEGER,
+  era NUMERIC(5,2),
+  g INTEGER,
+  gs INTEGER,
+  cg INTEGER,
+  sho INTEGER,
+  sv INTEGER,
+  ip NUMERIC(6,1),
+  h INTEGER,
+  r INTEGER,
+  er INTEGER,
+  hr INTEGER,
+  bb INTEGER,
+  so INTEGER,
+  whip NUMERIC(5,3),
+  fip NUMERIC(5,2),
+  xfip NUMERIC(5,2),
+  k_per_9 NUMERIC(5,2),
+  bb_per_9 NUMERIC(5,2),
+  hr_per_9 NUMERIC(5,2),
+  k_bb NUMERIC(5,2),
+  era_plus INTEGER,
+  war NUMERIC(5,1),
+  lob_pct NUMERIC(5,1),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE player_fielding_seasons (
+  id BIGSERIAL PRIMARY KEY,
+  player_id BIGINT NOT NULL,
+  player_name TEXT,
+  season INTEGER NOT NULL,
+  team_id BIGINT,
+  team TEXT,
+  position TEXT,
+  g INTEGER,
+  gs INTEGER,
+  inn NUMERIC(7,1),
+  po INTEGER,
+  a INTEGER,
+  e INTEGER,
+  dp INTEGER,
+  fld_pct NUMERIC(5,3),
+  rf_per_9 NUMERIC(5,2),
+  drs INTEGER,
+  oaa INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE team_batting_seasons (
+  id BIGSERIAL PRIMARY KEY,
+  team_id BIGINT NOT NULL,
+  team TEXT,
+  season INTEGER NOT NULL,
+  league TEXT,
+  division TEXT,
+  g INTEGER,
+  ab INTEGER,
+  pa INTEGER,
+  r INTEGER,
+  h INTEGER,
+  doubles INTEGER,
+  triples INTEGER,
+  hr INTEGER,
+  rbi INTEGER,
+  sb INTEGER,
+  cs INTEGER,
+  bb INTEGER,
+  so INTEGER,
+  avg NUMERIC(5,3),
+  obp NUMERIC(5,3),
+  slg NUMERIC(5,3),
+  ops NUMERIC(5,3),
+  babip NUMERIC(5,3),
+  iso NUMERIC(5,3),
+  woba NUMERIC(5,3),
+  wrc_plus INTEGER,
+  war NUMERIC(5,1),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE team_pitching_seasons (
+  id BIGSERIAL PRIMARY KEY,
+  team_id BIGINT NOT NULL,
+  team TEXT,
+  season INTEGER NOT NULL,
+  league TEXT,
+  division TEXT,
+  w INTEGER,
+  l INTEGER,
+  era NUMERIC(5,2),
+  g INTEGER,
+  gs INTEGER,
+  cg INTEGER,
+  sho INTEGER,
+  sv INTEGER,
+  ip NUMERIC(6,1),
+  h INTEGER,
+  r INTEGER,
+  er INTEGER,
+  hr INTEGER,
+  bb INTEGER,
+  so INTEGER,
+  whip NUMERIC(5,3),
+  fip NUMERIC(5,2),
+  k_per_9 NUMERIC(5,2),
+  bb_per_9 NUMERIC(5,2),
+  hr_per_9 NUMERIC(5,2),
+  era_plus INTEGER,
+  war NUMERIC(5,1),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE team_fielding_seasons (
+  id BIGSERIAL PRIMARY KEY,
+  team_id BIGINT NOT NULL,
+  team TEXT,
+  season INTEGER NOT NULL,
+  league TEXT,
+  g INTEGER,
+  po INTEGER,
+  a INTEGER,
+  e INTEGER,
+  dp INTEGER,
+  fld_pct NUMERIC(5,3),
+  drs INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX player_batting_seasons_player_season_team
+  ON player_batting_seasons (player_id, season, team_id);
+CREATE UNIQUE INDEX player_pitching_seasons_player_season_team
+  ON player_pitching_seasons (player_id, season, team_id);
+CREATE UNIQUE INDEX player_fielding_seasons_player_season_team_pos
+  ON player_fielding_seasons (player_id, season, team_id, position);
+CREATE UNIQUE INDEX team_batting_seasons_team_season
+  ON team_batting_seasons (team_id, season);
+CREATE UNIQUE INDEX team_pitching_seasons_team_season
+  ON team_pitching_seasons (team_id, season);
+CREATE UNIQUE INDEX team_fielding_seasons_team_season
+  ON team_fielding_seasons (team_id, season);
+
+CREATE INDEX idx_player_batting_player_id ON player_batting_seasons(player_id);
+CREATE INDEX idx_player_batting_season ON player_batting_seasons(season);
+CREATE INDEX idx_player_pitching_player_id ON player_pitching_seasons(player_id);
+CREATE INDEX idx_player_pitching_season ON player_pitching_seasons(season);
+CREATE INDEX idx_player_fielding_player_id ON player_fielding_seasons(player_id);
+CREATE INDEX idx_team_batting_team_id ON team_batting_seasons(team_id);
+CREATE INDEX idx_team_pitching_team_id ON team_pitching_seasons(team_id);
+
+-- ==============================================
 -- Foreign Key References
 -- ==============================================
 
@@ -151,6 +365,25 @@ CREATE INDEX idx_game_logs_game_date ON game_logs(game_date);
 
 ``player_id`` is the MLBAM batter id. It is **not** an enforced foreign key to ``players.id`` in Supabase; values may exist before a matching ``players`` row. Treat it as a **soft reference** for optional joins (e.g. ``LEFT JOIN players ON players.id = statcast_pitches.player_id``).
 
+## Players extended bio / career columns (migration)
+
+Optional historical fields (``player_id`` alignment with MLBAM). Not required for core app flows; enrich via ETL or manual SQL as needed.
+
+```sql
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS debut_date DATE;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS final_game DATE;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS name_first TEXT;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS name_last TEXT;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS birth_city TEXT;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS birth_country TEXT;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS height TEXT;
+ALTER TABLE public.players ADD COLUMN IF NOT EXISTS weight INTEGER;
+
+ALTER TABLE public.players ALTER COLUMN active SET DEFAULT true;
+```
+
+On the app, ``GET /api/players/[id]`` returns these as ``supabasePlayer`` when a row exists (soft reference / join aid to Statcast ``player_id``).
+
 ## statcast_batting ``pa`` column (migration)
 
 For databases created before ``pa`` was added, run in Supabase SQL editor:
@@ -172,6 +405,12 @@ ALTER TABLE statcast_pitches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE statcast_batting ENABLE ROW LEVEL SECURITY;
 ALTER TABLE game_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE social_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE player_batting_seasons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE player_pitching_seasons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE player_fielding_seasons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE team_batting_seasons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE team_pitching_seasons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE team_fielding_seasons ENABLE ROW LEVEL SECURITY;
 
 -- ==============================================
 -- Access Policies
@@ -199,6 +438,36 @@ CREATE POLICY "Public can read statcast batting"
 
 CREATE POLICY "Public can read game logs"
   ON game_logs FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Public can read player batting seasons"
+  ON player_batting_seasons FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Public can read player pitching seasons"
+  ON player_pitching_seasons FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Public can read player fielding seasons"
+  ON player_fielding_seasons FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Public can read team batting seasons"
+  ON team_batting_seasons FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Public can read team pitching seasons"
+  ON team_pitching_seasons FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Public can read team fielding seasons"
+  ON team_fielding_seasons FOR SELECT
   TO anon, authenticated
   USING (true);
 
@@ -248,3 +517,9 @@ END $$;
   batting metrics are updated by the pipeline
 - The existing RLS SELECT policy on both tables covers real-time events
 - The frontend uses the anon key for subscriptions
+
+## Historical season tables (reference)
+
+Season-level totals for players are stored in ``player_batting_seasons``, ``player_pitching_seasons``, and ``player_fielding_seasons``; franchise seasons in ``team_batting_seasons``, ``team_pitching_seasons``, ``team_fielding_seasons``. ``player_id`` / ``team_id`` align with MLBAM ids (soft references; no FK required).
+
+Unique indexes support upserts (see DDL above). The player profile API exposes the three player tables as ``historicalBatting``, ``historicalPitching``, and ``historicalFielding`` (newest ``season`` first).
