@@ -1,0 +1,17 @@
+# Environment variables
+.env
+
+# Python virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# pybaseball cache
+.pybaseball/
+
+# OS files
+.DS_Store
+Thumbs.db

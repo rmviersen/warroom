@@ -1,0 +1,5 @@
+pybaseball
+supabase
+pandas
+python-dotenv
+apscheduler
