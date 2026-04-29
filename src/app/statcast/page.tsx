@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useStatcastRealtime } from "@/lib/supabase-realtime";
 import type { StatcastBattingLeaderboardRow } from "@/types";
 
 export type LeaderboardStat =
@@ -69,6 +70,8 @@ export default function StatcastPage() {
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const toastDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (s: LeaderboardStat) => {
     setLoading(true);
@@ -98,6 +101,31 @@ export default function StatcastPage() {
     }
   }, [season]);
 
+  const flashToast = useCallback(() => {
+    setToastVisible(true);
+    if (toastDismissRef.current) clearTimeout(toastDismissRef.current);
+    toastDismissRef.current = setTimeout(() => {
+      setToastVisible(false);
+      toastDismissRef.current = null;
+    }, 3000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastDismissRef.current) clearTimeout(toastDismissRef.current);
+    };
+  }, []);
+
+  const { isLive } = useStatcastRealtime(
+    useCallback(
+      (_row) => {
+        flashToast();
+        void load(stat);
+      },
+      [flashToast, load, stat],
+    ),
+  );
+
   useEffect(() => {
     void load(stat);
   }, [stat, load]);
@@ -107,13 +135,27 @@ export default function StatcastPage() {
   return (
     <div className="space-y-8">
       <header className="space-y-4">
-        <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
-          <span className="text-red-500">WAR</span>
-          <span className="text-white">room</span>
-          <span className="text-gray-400 font-semibold text-2xl sm:text-3xl ml-2">
-            Statcast
-          </span>
-        </h1>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+            <span className="text-red-500">WAR</span>
+            <span className="text-white">room</span>
+            <span className="text-gray-400 font-semibold text-2xl sm:text-3xl ml-2">
+              Statcast
+            </span>
+          </h1>
+          {isLive ? (
+            <span
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-600/45 bg-emerald-950/35 px-3 py-1 text-xs font-bold uppercase tracking-widest text-emerald-300"
+              title="Listening for new pitch rows"
+            >
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              LIVE
+            </span>
+          ) : null}
+        </div>
         <div className="max-w-3xl text-gray-400 text-sm leading-relaxed space-y-2">
           <p>
             Statcast captures MLB pitch- and batted-ball tracking: pitch velocity
@@ -214,6 +256,26 @@ export default function StatcastPage() {
           </div>
         </div>
       )}
+      <StatcastToast visible={toastVisible} />
+    </div>
+  );
+}
+
+function StatcastToast({ visible }: { visible: boolean }) {
+  return (
+    <div
+      className={`fixed bottom-6 right-6 z-50 max-w-sm transition-all duration-300 ease-out ${
+        visible
+          ? "translate-y-0 opacity-100"
+          : "pointer-events-none translate-y-2 opacity-0"
+      }`}
+      role="status"
+      aria-live="polite"
+      aria-hidden={!visible}
+    >
+      <div className="rounded-lg border border-gray-700 bg-gray-900/95 px-4 py-3 text-sm text-gray-100 shadow-lg backdrop-blur-sm">
+        New Statcast data received
+      </div>
     </div>
   );
 }
