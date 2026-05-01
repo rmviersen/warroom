@@ -15,6 +15,8 @@ Requires a unique constraint on ``(player_id, season)`` for PostgREST upsert, e.
 from __future__ import annotations
 
 import math
+import sys
+import time
 from datetime import datetime
 from typing import Any
 
@@ -28,6 +30,8 @@ from db import get_client
 
 _NAME_COL = "last_name, first_name"
 _BATCH_SIZE = 500
+STATCAST_FIRST_SEASON = 2015
+_DELAY_BETWEEN_SEASONS_SEC = 5.0
 
 
 def _fetch_frames(season: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -234,8 +238,11 @@ def _row_to_supabase(rec: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def upsert_statcast_batting(rows: list[dict[str, Any]]) -> tuple[int, int]:
-    client = get_client()
+def upsert_statcast_batting(
+    rows: list[dict[str, Any]], client: Any | None = None
+) -> tuple[int, int]:
+    if client is None:
+        client = get_client()
     ok = 0
     failed = 0
 
@@ -255,30 +262,125 @@ def upsert_statcast_batting(rows: list[dict[str, Any]]) -> tuple[int, int]:
     return ok, failed
 
 
+def _parse_season_range() -> tuple[int, int]:
+    argv = sys.argv[1:]
+    now_y = datetime.now().year
+    try:
+        if len(argv) == 0:
+            return now_y, now_y
+        if len(argv) == 1:
+            return int(argv[0]), now_y
+        if len(argv) == 2:
+            return int(argv[0]), int(argv[1])
+    except ValueError:
+        print("Invalid season argument(s); integers required.", file=sys.stderr)
+        sys.exit(2)
+    print(
+        "Usage: python seed_statcast_batting.py [start_season [end_season]]\n"
+        "  (no args)     current year only\n"
+        "  2015            2015 through current year\n"
+        "  2015 2020      2015 through 2020 inclusive",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+
+def seed_season(year: int, client: Any) -> tuple[int, bool]:
+    """
+    Fetch Savant leaderboards for ``year``, merge, upsert.
+
+    Returns ``(rows_upserted_ok, success)``. ``success`` is False if the season
+    fails entirely (exception); partial batch failures still return success True
+    with reduced ``ok`` count.
+    """
+    print(
+        f"seed_statcast_batting: fetching Statcast leaderboards for season={year}…",
+        flush=True,
+    )
+    try:
+        exit_df, exp_df, spr_df = _fetch_frames(year)
+        merged = _merge_leaderboards(exit_df, exp_df, spr_df, year)
+        merged = _fill_team_id_from_players(merged)
+
+        records: list[dict[str, Any]] = []
+        for _, row in merged.iterrows():
+            mapped = _row_to_supabase(row.to_dict())
+            if mapped is not None:
+                records.append(mapped)
+
+        print(
+            f"seed_statcast_batting: merged {len(records)} rows "
+            f"(exit/barrel rows={len(exit_df)}, expected={len(exp_df)}, sprint={len(spr_df)}); "
+            f"upserting…",
+            flush=True,
+        )
+
+        ok, batch_failed = upsert_statcast_batting(records, client=client)
+        if batch_failed:
+            print(
+                f"[warn] seed_statcast_batting season {year}: {batch_failed} row(s) "
+                f"in failed batch(es); {ok} row(s) reported OK by client.",
+                flush=True,
+            )
+        return ok, True
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[warn] seed_statcast_batting season {year} failed: {exc}",
+            flush=True,
+        )
+        return 0, False
+
+
 def main() -> None:
-    season = datetime.now().year
-    print(f"seed_statcast_batting: fetching Statcast leaderboards for season={season}…")
+    start_season, end_season = _parse_season_range()
+    if start_season > end_season:
+        print(
+            f"start_season ({start_season}) must be <= end_season ({end_season})",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
-    exit_df, exp_df, spr_df = _fetch_frames(season)
-    merged = _merge_leaderboards(exit_df, exp_df, spr_df, season)
-    merged = _fill_team_id_from_players(merged)
+    client = get_client()
+    seasons = list(range(start_season, end_season + 1))
+    skipped = [y for y in seasons if y < STATCAST_FIRST_SEASON]
+    for y in skipped:
+        print(
+            f"[warn] seed_statcast_batting: season {y} skipped "
+            f"(Statcast batting leaderboards available from {STATCAST_FIRST_SEASON}+)",
+            flush=True,
+        )
 
-    records: list[dict[str, Any]] = []
-    for _, row in merged.iterrows():
-        mapped = _row_to_supabase(row.to_dict())
-        if mapped is not None:
-            records.append(mapped)
+    to_run = [y for y in seasons if y >= STATCAST_FIRST_SEASON]
+    total_run = len(to_run)
+    total_rows = 0
+    failed_seasons = 0
+
+    for i, year in enumerate(to_run, start=1):
+        ok, ok_season = seed_season(year, client)
+        if not ok_season:
+            failed_seasons += 1
+        else:
+            total_rows += ok
+        print(
+            f"[seed_statcast_batting] season {year} ({i}/{total_run}): "
+            f"upserted {ok} rows",
+            flush=True,
+        )
+        if i < total_run:
+            time.sleep(_DELAY_BETWEEN_SEASONS_SEC)
 
     print(
-        f"seed_statcast_batting: merged {len(records)} rows "
-        f"(exit/barrel rows={len(exit_df)}, expected={len(exp_df)}, sprint={len(spr_df)}); upserting…",
+        f"seed_statcast_batting: summary — "
+        f"Total seasons: {total_run}, "
+        f"Total rows upserted: {total_rows}, "
+        f"Failed seasons: {failed_seasons}",
+        flush=True,
     )
-
-    ok, failed = upsert_statcast_batting(records)
-    print(
-        f"seed_statcast_batting: done — upserted {ok} rows, "
-        f"{failed} row(s) in failed batches.",
-    )
+    if skipped:
+        print(
+            f"seed_statcast_batting: Skipped (pre-{STATCAST_FIRST_SEASON}): {len(skipped)}",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

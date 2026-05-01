@@ -1,4 +1,5 @@
 pybaseball
+requests
 supabase
 pandas
 python-dotenv

@@ -92,6 +92,21 @@ CREATE TABLE statcast_batting (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- League-level pitch aggregates by calendar season (aggregated from statcast_pitches).
+-- AVG ignores NULLs per column so lg_avg_velo and lg_avg_spin_rate are independent.
+CREATE OR REPLACE VIEW statcast_pitch_season_averages AS
+SELECT
+  EXTRACT(YEAR FROM game_date::date)::integer AS season,
+  ROUND(AVG(release_speed)::numeric, 4)       AS lg_avg_velo,
+  ROUND(AVG(release_spin_rate)::numeric, 4)   AS lg_avg_spin_rate,
+  COUNT(*)                                     AS pitch_count,
+  COUNT(release_speed)                         AS velo_count,
+  COUNT(release_spin_rate)                     AS spin_count
+FROM statcast_pitches
+WHERE game_date IS NOT NULL
+GROUP BY 1
+ORDER BY season;
+
 -- Game logs table
 CREATE TABLE game_logs (
   id BIGSERIAL PRIMARY KEY,
