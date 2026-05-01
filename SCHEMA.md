@@ -320,6 +320,24 @@ CREATE TABLE team_fielding_seasons (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Park factors by franchise and season (``team_id``: MLBAM id, soft reference to ``teams.id``).
+-- ``park_factor`` scale is left to the ETL / app (e.g. FanGraphs-style index ÷100 vs 1.0 neutral multiplier).
+CREATE TABLE park_factors (
+  id BIGSERIAL PRIMARY KEY,
+  team_id BIGINT NOT NULL,
+  team TEXT,
+  season INTEGER NOT NULL,
+  park_factor NUMERIC(6,3),
+  home_games INTEGER,
+  away_games INTEGER,
+  home_rs INTEGER,
+  home_ra INTEGER,
+  away_rs INTEGER,
+  away_ra INTEGER,
+  seasons_used INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE UNIQUE INDEX player_batting_seasons_player_season_team
   ON player_batting_seasons (player_id, season, team_id);
 CREATE UNIQUE INDEX player_pitching_seasons_player_season_team
@@ -332,6 +350,8 @@ CREATE UNIQUE INDEX team_pitching_seasons_team_season
   ON team_pitching_seasons (team_id, season);
 CREATE UNIQUE INDEX team_fielding_seasons_team_season
   ON team_fielding_seasons (team_id, season);
+CREATE UNIQUE INDEX park_factors_team_season
+  ON park_factors (team_id, season);
 
 CREATE INDEX idx_player_batting_player_id ON player_batting_seasons(player_id);
 CREATE INDEX idx_player_batting_season ON player_batting_seasons(season);
@@ -340,6 +360,8 @@ CREATE INDEX idx_player_pitching_season ON player_pitching_seasons(season);
 CREATE INDEX idx_player_fielding_player_id ON player_fielding_seasons(player_id);
 CREATE INDEX idx_team_batting_team_id ON team_batting_seasons(team_id);
 CREATE INDEX idx_team_pitching_team_id ON team_pitching_seasons(team_id);
+CREATE INDEX idx_park_factors_team_id ON park_factors(team_id);
+CREATE INDEX idx_park_factors_season ON park_factors(season);
 
 -- ==============================================
 -- Foreign Key References
@@ -426,6 +448,7 @@ ALTER TABLE player_fielding_seasons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE team_batting_seasons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE team_pitching_seasons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE team_fielding_seasons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE park_factors ENABLE ROW LEVEL SECURITY;
 
 -- ==============================================
 -- Access Policies
@@ -486,6 +509,11 @@ CREATE POLICY "Public can read team fielding seasons"
   TO anon, authenticated
   USING (true);
 
+CREATE POLICY "Public can read park factors"
+  ON park_factors FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
 -- Social posts are server-only
 -- (service role key bypasses RLS automatically)
 
@@ -535,6 +563,6 @@ END $$;
 
 ## Historical season tables (reference)
 
-Season-level totals for players are stored in ``player_batting_seasons``, ``player_pitching_seasons``, and ``player_fielding_seasons``; franchise seasons in ``team_batting_seasons``, ``team_pitching_seasons``, ``team_fielding_seasons``. ``player_id`` / ``team_id`` align with MLBAM ids (soft references; no FK required).
+Season-level totals for players are stored in ``player_batting_seasons``, ``player_pitching_seasons``, and ``player_fielding_seasons``; franchise seasons in ``team_batting_seasons``, ``team_pitching_seasons``, ``team_fielding_seasons``. ``player_id`` / ``team_id`` align with MLBAM ids (soft references; no FK required). Run-environment indices live in ``park_factors`` (``team_id``, ``season``), with a unique index for upserts and public read RLS matching other reference tables.
 
 Unique indexes support upserts (see DDL above). The player profile API exposes the three player tables as ``historicalBatting``, ``historicalPitching``, and ``historicalFielding`` (newest ``season`` first).
