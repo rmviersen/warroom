@@ -1,75 +1,48 @@
 """
-Load ``player_batting_seasons`` (SCHEMA.md) from 1990 through the current year.
+Load ``player_batting_seasons`` (SCHEMA.md) from 1990 through the current year
+(unless ``--season`` is set to process one year only).
 
-- **Source 1:** MLB Stats API season hitting stats (standard counting / slash lines).
-- **Source 2:** pybaseball / FanGraphs ``batting_stats`` (advanced), 2002+ only, joined
-  via ``playerid_reverse_lookup`` (FanGraphs ID -> MLBAM) and team abbreviation -> MLB
-  team id.
+**Source:** MLB Stats API season hitting stats (counting stats, slash lines, BABIP).
 
-FanGraphs requests are sent with browser-like headers (monkey-patched onto pybaseball's
-``requests.get``). If the live fetch returns 403, the script retries using pybaseball's
-disk cache when a prior cached response exists.
+**Derived:** ``iso``, ``bb_pct``, ``k_pct``, ``woba``, ``ops_plus``, ``wrc_plus``, and ``war``
+from ``batting_calcs`` / ``get_league_averages`` / ``get_park_factor`` (see ``merge_derived_advanced()``).
+Park for ``ops_plus`` uses batched ``park_factors``; ``wrc_plus`` / ``batting_war`` use ``get_park_factor``.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime
-from typing import Any
+from typing import Any, Iterable
 
 import config  # noqa: F401
-import pandas as pd
-import pybaseball.cache as pb_cache
-import requests
-from pybaseball import batting_stats, playerid_reverse_lookup
-from pybaseball.datasources import html_table_processor as _pybb_html_table
-
+from calculations.batting_calcs import (
+    calc_batting_war,
+    calc_bb_pct,
+    calc_iso,
+    calc_k_pct,
+    calc_ops_plus,
+    calc_singles,
+    calc_woba,
+    calc_wrc_plus,
+)
+from calculations.constants import get_park_factor
+from calculations.fetch_league_averages import get_league_averages
 from db import get_client
 
 START_SEASON = 1990
-FANGRAPHS_START = 2002
 MLB_STATS_URL = (
     "https://statsapi.mlb.com/api/v1/stats"
-    "?stats=season&group=hitting&season={season}&sportId=1&limit={limit}&offset={offset}"
+    "?stats=season&group=hitting&season={season}&sportId=1&playerPool=all&limit={limit}&offset={offset}"
 )
-MLB_TEAMS_URL = "https://statsapi.mlb.com/api/v1/teams?sportId=1"
 _BATCH_SIZE = 500
 _DELAY_SEC = 2
-_FG_DELAY_SEC = 3
-_LOOKUP_CHUNK = 150
-
-# Browser-like headers for FanGraphs / pybaseball HTTP (avoids 403 on bot filtering).
-_FANGRAPHS_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": (
-        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    ),
-    "Accept-Language": "en-US,en;q=0.5",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Referer": "https://www.fangraphs.com/",
-}
-
-_FG_HTTP_SESSION = requests.Session()
-_FG_HTTP_SESSION.headers.update(_FANGRAPHS_HEADERS)
-_ORIG_PYBB_REQUESTS_GET = _pybb_html_table.requests.get
-
-# FanGraphs team abbrev quirks vs MLB ``abbreviation`` on /teams
-_FG_TO_MLB_ABBREV = {
-    "ARI": "AZ",
-    "WSN": "WSH",
-    "SFG": "SF",
-    "TBR": "TB",
-    "KCR": "KC",
-    "SDP": "SD",
-    "CHW": "CWS",
-}
+_PARK_FACTORS_PAGE = 1000
 
 _UPSERT_COLUMNS = (
     "player_id",
@@ -106,101 +79,6 @@ _UPSERT_COLUMNS = (
 )
 
 
-def _patch_pybaseball_requests_for_fangraphs() -> None:
-    """Route pybaseball FanGraphs fetches through a browser-like Session."""
-
-    def _patched_get(url: str, **kwargs: Any) -> requests.Response:
-        return _FG_HTTP_SESSION.get(url, **kwargs)
-
-    _pybb_html_table.requests.get = _patched_get  # type: ignore[assignment]
-
-
-def _unpatch_pybaseball_requests() -> None:
-    _pybb_html_table.requests.get = _ORIG_PYBB_REQUESTS_GET  # type: ignore[assignment]
-
-
-def fetch_fangraphs_batting_stats(season: int) -> pd.DataFrame | None:
-    """
-    Pull FanGraphs batting leaderboard for one season.
-
-    1. Monkey-patch pybaseball to use Session headers, then call ``batting_stats``.
-    2. On 403, retry with pybaseball disk cache enabled (no patch) so a prior cached
-       dataframe can be returned without a new HTTP request.
-    3. If both fail, log and return None.
-    """
-
-    _patch_pybaseball_requests_for_fangraphs()
-    try:
-        df = batting_stats(season, qual=1)
-        if df is not None and not df.empty:
-            return df
-        return None
-    except requests.HTTPError as exc:
-        err = str(exc)
-        if "403" not in err:
-            raise
-    finally:
-        _unpatch_pybaseball_requests()
-
-    cache_was_on = pb_cache.config.enabled
-    pb_cache.enable()
-    try:
-        df = batting_stats(season, qual=1)
-        if df is not None and not df.empty:
-            print(
-                f"seed_player_batting_seasons: FanGraphs season {season} — "
-                "using pybaseball disk cache (403 on live fetch).",
-                flush=True,
-            )
-            return df
-    except Exception as exc:  # noqa: BLE001
-        print(
-            f"seed_player_batting_seasons: FanGraphs cache fallback failed "
-            f"(season={season}): {exc}",
-            flush=True,
-        )
-    finally:
-        if not cache_was_on:
-            pb_cache.disable()
-
-    print(
-        f"seed_player_batting_seasons: FanGraphs season {season} — "
-        "403 and no usable cache; continuing MLB-only for advanced columns.",
-        flush=True,
-    )
-    return None
-
-
-def fetch_team_abbrev_to_id() -> dict[str, int]:
-    """Map uppercase team abbreviation -> MLB team id (all franchises, sportId=1)."""
-
-    req = urllib.request.Request(MLB_TEAMS_URL, headers={"User-Agent": "WARroom-pipeline/1.0"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
-    out: dict[str, int] = {}
-    for t in payload.get("teams") or []:
-        tid = t.get("id")
-        ab = t.get("abbreviation")
-        if tid is None or not isinstance(ab, str):
-            continue
-        out[ab.strip().upper()] = int(tid)
-    return out
-
-
-def resolve_fg_team_id(raw_team: str, abbrev_to_id: dict[str, int]) -> int | None:
-    s = raw_team.strip().upper() if isinstance(raw_team, str) else ""
-    if not s or s in ("-", "TOT", "AVG") or "TM" in s or "TMS" in s:
-        return None
-    if "/" in s:
-        return None
-    if s in abbrev_to_id:
-        return abbrev_to_id[s]
-    alt = _FG_TO_MLB_ABBREV.get(s)
-    if alt and alt in abbrev_to_id:
-        return abbrev_to_id[alt]
-    return None
-
-
 def to_int(v: Any) -> int | None:
     if v is None:
         return None
@@ -233,14 +111,67 @@ def to_float(v: Any) -> float | None:
         return None
 
 
-def to_pct_float(v: Any) -> float | None:
-    """FanGraphs may give 8.2 or 0.082; store as fraction (e.g. 0.082)."""
-    x = to_float(v)
-    if x is None:
-        return None
-    if x > 1.0:
-        return round(x / 100.0, 4)
-    return x
+def load_park_factors_by_team_season(client: Any) -> dict[tuple[int, int], float]:
+    """``(team_id, season) -> runs_factor`` from ``park_factors`` (paginated)."""
+
+    out: dict[tuple[int, int], float] = {}
+    offset = 0
+    while True:
+        try:
+            resp = (
+                client.table("park_factors")
+                .select("team_id,season,runs_factor")
+                .range(offset, offset + _PARK_FACTORS_PAGE - 1)
+                .execute()
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"seed_player_batting_seasons: park_factors page at offset {offset} failed: {exc}",
+                flush=True,
+            )
+            break
+        rows = resp.data or []
+        for row in rows:
+            tid = row.get("team_id")
+            season = row.get("season")
+            rf = row.get("runs_factor")
+            if tid is None or season is None or rf is None:
+                continue
+            try:
+                out[(int(tid), int(season))] = float(rf)
+            except (TypeError, ValueError):
+                continue
+        if len(rows) < _PARK_FACTORS_PAGE:
+            break
+        offset += _PARK_FACTORS_PAGE
+    return out
+
+
+def warm_league_averages_for_seasons(seasons: Iterable[int]) -> list[int]:
+    """Load ``league_averages.json`` once (first ``get_league_averages`` call) and note gaps."""
+
+    missing: list[int] = []
+    for year in seasons:
+        if get_league_averages(year) is None:
+            missing.append(year)
+    return missing
+
+
+def _parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Backfill player_batting_seasons from the MLB Stats API.",
+    )
+    p.add_argument(
+        "--season",
+        type=int,
+        default=None,
+        metavar="YEAR",
+        help=(
+            "Process only this season. "
+            f"Default: full range {START_SEASON} through the current calendar year."
+        ),
+    )
+    return p.parse_args()
 
 
 def fetch_mlb_hitting_splits(season: int, limit: int = 1000) -> list[dict[str, Any]]:
@@ -277,6 +208,11 @@ def split_to_base_row(split: dict[str, Any], season: int) -> dict[str, Any] | No
         return None
     tid = team.get("id")
 
+    pp = player.get("primaryPosition")
+    prim_pos = pp if isinstance(pp, dict) else {}
+    pos_abbrev = prim_pos.get("abbreviation")
+    _position = pos_abbrev if isinstance(pos_abbrev, str) else None
+
     return {
         "player_id": int(pid),
         "player_name": player.get("fullName"),
@@ -302,6 +238,9 @@ def split_to_base_row(split: dict[str, Any], season: int) -> dict[str, Any] | No
         "slg": to_float(stat.get("slg")),
         "ops": to_float(stat.get("ops")),
         "babip": to_float(stat.get("babip")),
+        "_hbp": to_int(stat.get("hitByPitch")),
+        "_ibb": to_int(stat.get("intentionalWalks")),
+        "_position": _position,
         "iso": None,
         "bb_pct": None,
         "k_pct": None,
@@ -312,129 +251,99 @@ def split_to_base_row(split: dict[str, Any], season: int) -> dict[str, Any] | No
     }
 
 
-def fg_id_to_mlbam(fg_ids: list[int]) -> dict[int, int]:
-    out: dict[int, int] = {}
-    if not fg_ids:
-        return out
-    for i in range(0, len(fg_ids), _LOOKUP_CHUNK):
-        chunk = fg_ids[i : i + _LOOKUP_CHUNK]
-        try:
-            df = playerid_reverse_lookup(chunk, key_type="fangraphs")
-        except Exception:  # noqa: BLE001
-            continue
-        if df is None or df.empty:
-            continue
-        for _, row in df.iterrows():
-            kfg = row.get("key_fangraphs")
-            mlb = row.get("key_mlbam")
-            if kfg is None or mlb is None or pd.isna(mlb):
-                continue
-            try:
-                out[int(kfg)] = int(mlb)
-            except (TypeError, ValueError):
-                pass
-    return out
-
-
-def _series_get(row: pd.Series, *names: str) -> Any:
-    for n in names:
-        if n in row.index:
-            v = row[n]
-            if pd.isna(v):
-                return None
-            return v
-    return None
-
-
-def build_fg_adv_maps(
-    season: int,
-    abbrev_to_id: dict[str, int],
-) -> tuple[dict[tuple[int, int, int], dict[str, Any]], dict[tuple[int, int], dict[str, Any]]]:
-    """
-    FanGraphs row keys:
-    - Exact: (mlbam, season, team_id) when team abbrev resolves.
-    - Fallback: (mlbam, season) for multi-team / ambiguous abbrev rows (last wins).
-    """
-
-    adv_exact: dict[tuple[int, int, int], dict[str, Any]] = {}
-    adv_fallback: dict[tuple[int, int], dict[str, Any]] = {}
-
-    df = fetch_fangraphs_batting_stats(season)
-    if df is None or df.empty:
-        return adv_exact, adv_fallback
-
-    if "IDfg" not in df.columns:
-        print(f"seed_player_batting_seasons: FanGraphs frame missing IDfg (season={season}).")
-        return adv_exact, adv_fallback
-
-    fg_ids = []
-    for raw in df["IDfg"].tolist():
-        n = to_int(raw)
-        if n is not None:
-            fg_ids.append(n)
-    fg_ids = sorted(set(fg_ids))
-    fg_to_mlb = fg_id_to_mlbam(fg_ids)
-
-    for _, row in df.iterrows():
-        fg = to_int(_series_get(row, "IDfg"))
-        if fg is None:
-            continue
-        mlb = fg_to_mlb.get(fg)
-        if mlb is None:
-            continue
-
-        team_raw = _series_get(row, "Team")
-        team_id = resolve_fg_team_id(str(team_raw), abbrev_to_id) if team_raw is not None else None
-
-        pack = {
-            "iso": to_float(_series_get(row, "ISO")),
-            "bb_pct": to_pct_float(_series_get(row, "BB%")),
-            "k_pct": to_pct_float(_series_get(row, "K%")),
-            "ops_plus": to_int(_series_get(row, "OPS+")),
-            "woba": to_float(_series_get(row, "wOBA")),
-            "wrc_plus": to_int(_series_get(row, "wRC+")),
-            "war": to_float(_series_get(row, "WAR")),
-        }
-
-        if team_id is not None:
-            adv_exact[(mlb, season, team_id)] = pack
-        else:
-            adv_fallback[(mlb, season)] = pack
-
-    return adv_exact, adv_fallback
-
-
-def merge_advanced(
+def merge_derived_advanced(
     row: dict[str, Any],
-    adv_exact: dict[tuple[int, int, int], dict[str, Any]],
-    adv_fallback: dict[tuple[int, int], dict[str, Any]],
+    park_by_team_season: dict[tuple[int, int], float],
 ) -> None:
-    pid = row["player_id"]
-    season = row["season"]
-    tid = row["team_id"]
+    """Fill rate stats from ``batting_calcs``; pop internal ``_hbp`` / ``_ibb`` / ``_position``."""
 
-    pack = None
+    season = row["season"]
+    hbp_i = row.pop("_hbp", None)
+    position_s = row.pop("_position", None)
+    row.pop("_ibb", None)  # from ``intentionalWalks``; reserved for future uBB / wOBA tweaks
+    hbp_f = float(hbp_i) if hbp_i is not None else None
+
+    row["iso"] = calc_iso(row.get("slg"), row.get("avg"))
+    _bb_pct = calc_bb_pct(
+        float(row["bb"]) if row.get("bb") is not None else None,
+        float(row["pa"]) if row.get("pa") is not None else None,
+    )
+    _k_pct = calc_k_pct(
+        float(row["so"]) if row.get("so") is not None else None,
+        float(row["pa"]) if row.get("pa") is not None else None,
+    )
+    row["bb_pct"] = round(_bb_pct * 100.0, 1) if _bb_pct is not None else None
+    row["k_pct"] = round(_k_pct * 100.0, 1) if _k_pct is not None else None
+
+    singles = calc_singles(
+        float(row["h"]) if row.get("h") is not None else None,
+        float(row["doubles"]) if row.get("doubles") is not None else None,
+        float(row["triples"]) if row.get("triples") is not None else None,
+        float(row["hr"]) if row.get("hr") is not None else None,
+    )
+    # MLB API: ``baseOnBalls`` is walks (including IBB); ``hitByPitch`` is separate.
+    row["woba"] = calc_woba(
+        float(row["bb"]) if row.get("bb") is not None else None,
+        hbp_f,
+        singles,
+        float(row["doubles"]) if row.get("doubles") is not None else None,
+        float(row["triples"]) if row.get("triples") is not None else None,
+        float(row["hr"]) if row.get("hr") is not None else None,
+        float(row["pa"]) if row.get("pa") is not None else None,
+        int(season),
+    )
+
+    tid = row.get("team_id")
+    pf = 1.0
     if tid is not None:
-        pack = adv_exact.get((pid, season, int(tid)))
-    if pack is None:
-        pack = adv_fallback.get((pid, season))
-    if pack is None:
-        return
-    row["iso"] = pack.get("iso")
-    row["bb_pct"] = pack.get("bb_pct")
-    row["k_pct"] = pack.get("k_pct")
-    row["ops_plus"] = pack.get("ops_plus")
-    row["woba"] = pack.get("woba")
-    row["wrc_plus"] = pack.get("wrc_plus")
-    row["war"] = pack.get("war")
+        pf = park_by_team_season.get((int(tid), int(season)), 1.0)
+
+    raw_ops_plus = calc_ops_plus(row.get("obp"), row.get("slg"), int(season), park_factor=pf)
+    row["ops_plus"] = int(round(raw_ops_plus)) if raw_ops_plus is not None else None
+
+    lg_row = get_league_averages(int(season))
+    if lg_row is None:
+        row["wrc_plus"] = None
+        row["war"] = None
+    else:
+        lg_woba = to_float(lg_row.get("lgwOBA"))
+        lg_r = to_float(lg_row.get("lgR"))
+        lg_pa = to_float(lg_row.get("lgPA"))
+        if lg_r is not None and lg_pa is not None and float(lg_pa) != 0:
+            lg_rperpa = float(lg_r) / float(lg_pa)
+        else:
+            lg_rperpa = None
+        lg_ip = to_float(lg_row.get("lgIP"))
+        pf_wrc = get_park_factor(row.get("team_id"), int(season))
+        pa_f = float(row["pa"]) if row.get("pa") is not None else None
+        g_f = float(row["g"]) if row.get("g") is not None else None
+        row["wrc_plus"] = calc_wrc_plus(
+            row.get("woba"),
+            pa_f,
+            int(season),
+            lg_woba,
+            lg_rperpa,
+            park_factor=pf_wrc,
+        )
+        row["war"] = calc_batting_war(
+            row.get("woba"),
+            pa_f,
+            g_f,
+            position_s,
+            int(season),
+            lg_woba,
+            lg_r,
+            lg_pa,
+            lg_ip,
+            park_factor=pf_wrc,
+        )
 
 
 def row_for_upsert(r: dict[str, Any]) -> dict[str, Any]:
     return {k: r[k] for k in _UPSERT_COLUMNS}
 
 
-def upsert_batches(rows: list[dict[str, Any]]) -> tuple[int, int]:
-    client = get_client()
+def upsert_batches(client: Any, rows: list[dict[str, Any]]) -> tuple[int, int]:
     ok = 0
     failed = 0
     for i in range(0, len(rows), _BATCH_SIZE):
@@ -453,58 +362,74 @@ def upsert_batches(rows: list[dict[str, Any]]) -> tuple[int, int]:
 
 
 def main() -> None:
+    args = _parse_args()
     end_year = datetime.now().year
+
+    if args.season is not None:
+        if args.season < START_SEASON:
+            raise SystemExit(
+                f"seed_player_batting_seasons: --season must be >= {START_SEASON} "
+                f"(got {args.season})."
+            )
+        years = [args.season]
+        range_desc = f"season {args.season} only"
+    else:
+        years = list(range(START_SEASON, end_year + 1))
+        range_desc = f"{START_SEASON}..{end_year}"
+
     print(
-        f"seed_player_batting_seasons: MLB {START_SEASON}..{end_year}; "
-        f"FanGraphs merge from {FANGRAPHS_START}. "
-        f"Post-season pause: {_DELAY_SEC}s (pre-{FANGRAPHS_START}), "
-        f"{_FG_DELAY_SEC}s for FanGraphs years.",
+        f"seed_player_batting_seasons: MLB {range_desc}; "
+        f"derived advanced from calculations + park_factors; "
+        f"delay between seasons={_DELAY_SEC}s.",
         flush=True,
     )
-    abbrev_to_id = fetch_team_abbrev_to_id()
-    print(f"seed_player_batting_seasons: loaded {len(abbrev_to_id)} team abbreviations.", flush=True)
+
+    client = get_client()
+    park_by_team_season = load_park_factors_by_team_season(client)
+    print(
+        f"seed_player_batting_seasons: loaded {len(park_by_team_season)} "
+        f"park_factors (team_id, season) keys.",
+        flush=True,
+    )
+
+    missing_lg = warm_league_averages_for_seasons(years)
+    if missing_lg:
+        print(
+            f"seed_player_batting_seasons: [warn] league averages missing for "
+            f"{len(missing_lg)} season(s) (ops+/woba may be null): "
+            f"{missing_lg[:25]}{'…' if len(missing_lg) > 25 else ''}",
+            flush=True,
+        )
 
     total_ok = 0
     total_fail = 0
     seasons_run = 0
 
-    for year in range(START_SEASON, end_year + 1):
+    n_years = len(years)
+    for idx, year in enumerate(years):
         splits = fetch_mlb_hitting_splits(year)
-        adv_exact: dict[tuple[int, int, int], dict[str, Any]] = {}
-        adv_fallback: dict[tuple[int, int], dict[str, Any]] = {}
-        fg_msg = "no FanGraphs (year < 2002)"
-
-        if year >= FANGRAPHS_START:
-            try:
-                adv_exact, adv_fallback = build_fg_adv_maps(year, abbrev_to_id)
-                fg_msg = (
-                    f"FG keys exact={len(adv_exact)} fallback={len(adv_fallback)}"
-                )
-            except Exception as exc:  # noqa: BLE001
-                fg_msg = f"FanGraphs skip ({exc})"
-
         merged: list[dict[str, Any]] = []
         for sp in splits:
             base = split_to_base_row(sp, year)
             if base is None:
                 continue
-            merge_advanced(base, adv_exact, adv_fallback)
+            merge_derived_advanced(base, park_by_team_season)
             merged.append(base)
 
-        ok, fail = upsert_batches(merged)
+        ok, fail = upsert_batches(client, merged)
         total_ok += ok
         total_fail += fail
         seasons_run += 1
 
         print(
             f"seed_player_batting_seasons: season {year} — "
-            f"MLB splits={len(splits)}, merged_rows={len(merged)}, "
-            f"{fg_msg}; upsert_ok_batch={ok}, upsert_fail_batch={fail}",
+            f"MLB splits={len(splits)}, rows={len(merged)}, "
+            f"upsert_ok_batch={ok}, upsert_fail_batch={fail}",
             flush=True,
         )
 
-        if year < end_year:
-            time.sleep(_FG_DELAY_SEC if year >= FANGRAPHS_START else _DELAY_SEC)
+        if idx < n_years - 1:
+            time.sleep(_DELAY_SEC)
 
     print(
         f"seed_player_batting_seasons: finished — seasons={seasons_run}, "

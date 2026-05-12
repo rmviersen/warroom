@@ -130,3 +130,35 @@ export function parseMlbPlayerSeasonStats(
     pitching,
   };
 }
+
+/**
+ * Season pitching wins, losses, and ERA from a hydrated ``stats`` array
+ * (e.g. ``people[].stats`` or schedule probable-pitcher enrichment).
+ */
+export function parseHydratedPitchingSeasonSummary(
+  stats: unknown,
+  seasonYear: number,
+): { wins: number; losses: number; era: string | null } | null {
+  if (!Array.isArray(stats)) return null;
+
+  const groups = stats as MlbStatGroup[];
+  const pitchingGroup = groups.find(
+    (g) =>
+      g.type?.displayName?.toLowerCase() === "season" &&
+      g.group?.displayName?.toLowerCase() === "pitching",
+  );
+  const split = pickRegularSeasonSplit(pitchingGroup?.splits, seasonYear);
+  if (!split?.stat) return null;
+
+  const stat = split.stat as Record<string, unknown>;
+  const wins = num(stat.wins);
+  const losses = num(stat.losses);
+  const era = str(stat.era);
+  if (wins == null && losses == null && era == null) return null;
+
+  return {
+    wins: wins ?? 0,
+    losses: losses ?? 0,
+    era,
+  };
+}

@@ -317,6 +317,8 @@ export interface TeamStatcastApiResponse {
 
 /** Single team row for standings tables on the dashboard. */
 export interface StandingRow {
+  /** MLBAM team id (for routes like ``/teams/[id]``). */
+  teamId: number;
   teamName: string;
   wins: number;
   losses: number;

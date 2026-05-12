@@ -118,8 +118,10 @@ export function calcWOBA(
 }
 
 /**
- * OPS+ style index: 100 × (OBP/lgOBP + SLG/lgSLG − 1) / parkFactor.
- * lgOBP / lgSLG from `get_league_averages` / JSON.
+ * OPS+ (Baseball Reference methodology):
+ * ``100 × (OBP/lgOBP + SLG/lgSLG − 1) / parkFactor``
+ *
+ * ``parkFactor`` defaults to ``1.0`` (neutral). Pass the team park factor when known.
  */
 export function calcOPSPlus(
   obp: number | null,

@@ -17,6 +17,7 @@ from .constants import (
     get_fip_constant,
     get_park_factor,
     get_woba_weights,
+    refresh_park_factors_cache,
 )
 from .fielding_calcs import (
     calc_fld_pct,
@@ -66,4 +67,5 @@ __all__ = [
     "get_fip_constant",
     "get_park_factor",
     "get_woba_weights",
+    "refresh_park_factors_cache",
 ]

@@ -118,10 +118,46 @@ CREATE TABLE game_logs (
   away_team_id BIGINT,
   home_score INTEGER,
   away_score INTEGER,
+  home_hits INTEGER,
+  home_hr INTEGER,
+  home_bb INTEGER,
+  home_so INTEGER,
+  home_singles INTEGER,
+  home_doubles INTEGER,
+  home_triples INTEGER,
+  away_hits INTEGER,
+  away_hr INTEGER,
+  away_bb INTEGER,
+  away_so INTEGER,
+  away_singles INTEGER,
+  away_doubles INTEGER,
+  away_triples INTEGER,
   status TEXT,
   venue TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Existing databases: nullable counting stats per side. Older installs may have used
+-- ``home_home_runs`` / ``home_walks`` / ``home_strikeouts`` (and away analogs); run
+-- ``supabase/migrations/20260512120000_game_logs_rename_box_score_columns.sql`` to rename
+-- to ``home_hr`` / ``home_bb`` / ``home_so`` (and away analogs) and ``DROP`` any leftover legacy names.
+```sql
+ALTER TABLE public.game_logs
+  ADD COLUMN IF NOT EXISTS home_hits INTEGER,
+  ADD COLUMN IF NOT EXISTS home_hr INTEGER,
+  ADD COLUMN IF NOT EXISTS home_bb INTEGER,
+  ADD COLUMN IF NOT EXISTS home_so INTEGER,
+  ADD COLUMN IF NOT EXISTS home_singles INTEGER,
+  ADD COLUMN IF NOT EXISTS home_doubles INTEGER,
+  ADD COLUMN IF NOT EXISTS home_triples INTEGER,
+  ADD COLUMN IF NOT EXISTS away_hits INTEGER,
+  ADD COLUMN IF NOT EXISTS away_hr INTEGER,
+  ADD COLUMN IF NOT EXISTS away_bb INTEGER,
+  ADD COLUMN IF NOT EXISTS away_so INTEGER,
+  ADD COLUMN IF NOT EXISTS away_singles INTEGER,
+  ADD COLUMN IF NOT EXISTS away_doubles INTEGER,
+  ADD COLUMN IF NOT EXISTS away_triples INTEGER;
+```
 
 -- Social posts log table
 CREATE TABLE social_posts (
@@ -321,13 +357,22 @@ CREATE TABLE team_fielding_seasons (
 );
 
 -- Park factors by franchise and season (``team_id``: MLBAM id, soft reference to ``teams.id``).
--- ``park_factor`` scale is left to the ETL / app (e.g. FanGraphs-style index ÷100 vs 1.0 neutral multiplier).
+-- ``runs_factor`` (formerly ``park_factor``) and component factors scale are left to the ETL / app
+-- (e.g. FanGraphs-style index ÷100 vs 1.0 neutral multiplier). See migration
+-- ``supabase/migrations/20260513120000_park_factors_runs_factor_and_components.sql``.
 CREATE TABLE park_factors (
   id BIGSERIAL PRIMARY KEY,
   team_id BIGINT NOT NULL,
   team TEXT,
   season INTEGER NOT NULL,
-  park_factor NUMERIC(6,3),
+  runs_factor NUMERIC(6,3),
+  hr_factor NUMERIC(6,3),
+  hits_factor NUMERIC(6,3),
+  singles_factor NUMERIC(6,3),
+  doubles_factor NUMERIC(6,3),
+  triples_factor NUMERIC(6,3),
+  bb_factor NUMERIC(6,3),
+  so_factor NUMERIC(6,3),
   home_games INTEGER,
   away_games INTEGER,
   home_rs INTEGER,
@@ -335,8 +380,41 @@ CREATE TABLE park_factors (
   away_rs INTEGER,
   away_ra INTEGER,
   seasons_used INTEGER,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Existing databases with ``park_factor``: run
+-- ``supabase/migrations/20260513120000_park_factors_runs_factor_and_components.sql`` (idempotent).
+```sql
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'park_factors'
+      AND column_name = 'park_factor'
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'park_factors'
+      AND column_name = 'runs_factor'
+  ) THEN
+    ALTER TABLE public.park_factors RENAME COLUMN park_factor TO runs_factor;
+  END IF;
+END $$;
+
+ALTER TABLE public.park_factors
+  ADD COLUMN IF NOT EXISTS hr_factor NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS hits_factor NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS singles_factor NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS doubles_factor NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS triples_factor NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS bb_factor NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS so_factor NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+```
 
 CREATE UNIQUE INDEX player_batting_seasons_player_season_team
   ON player_batting_seasons (player_id, season, team_id);
@@ -563,6 +641,6 @@ END $$;
 
 ## Historical season tables (reference)
 
-Season-level totals for players are stored in ``player_batting_seasons``, ``player_pitching_seasons``, and ``player_fielding_seasons``; franchise seasons in ``team_batting_seasons``, ``team_pitching_seasons``, ``team_fielding_seasons``. ``player_id`` / ``team_id`` align with MLBAM ids (soft references; no FK required). Run-environment indices live in ``park_factors`` (``team_id``, ``season``), with a unique index for upserts and public read RLS matching other reference tables.
+Season-level totals for players are stored in ``player_batting_seasons``, ``player_pitching_seasons``, and ``player_fielding_seasons``; franchise seasons in ``team_batting_seasons``, ``team_pitching_seasons``, ``team_fielding_seasons``. ``player_id`` / ``team_id`` align with MLBAM ids (soft references; no FK required). Run-environment indices live in ``park_factors`` (``team_id``, ``season``): ``runs_factor`` plus optional component factors (``hr_factor``, ``hits_factor``, etc.), with a unique index for upserts and public read RLS matching other reference tables.
 
 Unique indexes support upserts (see DDL above). The player profile API exposes the three player tables as ``historicalBatting``, ``historicalPitching``, and ``historicalFielding`` (newest ``season`` first).

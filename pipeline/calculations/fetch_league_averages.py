@@ -51,23 +51,6 @@ STATCAST_DEFAULTS: dict[str, Any] = {
     "lgAvgSpinRate": None,
 }
 
-# Placeholder until real park indices are wired (CSV / table keyed by franchise + year).
-NEUTRAL_PARK_FACTOR = 1.0
-
-
-def get_park_factor(team_id: int, season: int) -> float:
-    """
-    Return run environment multiplier for ``team_id`` in ``season`` (1.0 = neutral).
-
-    To plug in real factors later: load a table such as ``park_factors(team_id,
-    season, hr_factor, so_factor, ...)`` (FanGraphs, Clay Davenport, or a custom
-    blend), convert to ``PF`` vs league (often /100), and interpolate seasons /
-    franchise moves. For now every park returns ``NEUTRAL_PARK_FACTOR``.
-    """
-    _ = (team_id, season)
-    return float(NEUTRAL_PARK_FACTOR)
-
-
 def get_woba_weights(season: int) -> dict[str, float]:
     """Static wOBA linear weights by MLB era (approximate league-wide values)."""
     y = int(season)
@@ -627,7 +610,13 @@ def build_league_table(
         bat_src = "supabase"
         pit_src = "supabase"
 
-        if season not in batting_by_season or batting_by_season[season]["ab"] == 0:
+        # Use MLB totals only as a fallback when warehouse batting has no AB rows
+        # for this season; never add API totals on top of Supabase aggregates.
+        sb_bat = batting_by_season.get(season)
+        sb_ab = int(sb_bat.get("ab", 0) or 0) if sb_bat is not None else 0
+        if sb_bat is not None and sb_ab > 0:
+            bat_src = "supabase"
+        else:
             batting_by_season[season] = _fetch_mlb_hitting_totals(season)
             bat_src = (
                 "mlb_api"
