@@ -213,6 +213,40 @@ CREATE TABLE player_batting_seasons (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Per-position batting performance (counting stats and rate metrics split by defensive ``position``).
+-- Complements aggregate season lines in ``player_batting_seasons``; unlike ``player_fielding_seasons``,
+-- rows here are batting-focused. ``player_id`` / ``team_id``: MLBAM-aligned soft references (no FK).
+-- Note: with a unique index on ``(player_id, season, team_id, position)``, PostgreSQL treats
+-- multiple NULL ``team_id`` values as distinct—avoid duplicate rows for ``team_id`` IS NULL if used.
+CREATE TABLE player_position_seasons (
+  id BIGSERIAL PRIMARY KEY,
+  player_id BIGINT NOT NULL,
+  player_name TEXT,
+  season INTEGER NOT NULL,
+  team_id BIGINT,
+  team TEXT,
+  position TEXT NOT NULL,
+  g INTEGER,
+  pa INTEGER,
+  ab INTEGER,
+  h INTEGER,
+  doubles INTEGER,
+  triples INTEGER,
+  hr INTEGER,
+  bb INTEGER,
+  so INTEGER,
+  hbp INTEGER,
+  avg NUMERIC(5,3),
+  obp NUMERIC(5,3),
+  slg NUMERIC(5,3),
+  ops NUMERIC(5,3),
+  woba NUMERIC(5,3),
+  ops_plus INTEGER,
+  wrc_plus INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE player_pitching_seasons (
   id BIGSERIAL PRIMARY KEY,
   player_id BIGINT NOT NULL,
@@ -418,6 +452,8 @@ ALTER TABLE public.park_factors
 
 CREATE UNIQUE INDEX player_batting_seasons_player_season_team
   ON player_batting_seasons (player_id, season, team_id);
+CREATE UNIQUE INDEX player_position_seasons_player_season_team_pos
+  ON player_position_seasons (player_id, season, team_id, position);
 CREATE UNIQUE INDEX player_pitching_seasons_player_season_team
   ON player_pitching_seasons (player_id, season, team_id);
 CREATE UNIQUE INDEX player_fielding_seasons_player_season_team_pos
@@ -433,6 +469,8 @@ CREATE UNIQUE INDEX park_factors_team_season
 
 CREATE INDEX idx_player_batting_player_id ON player_batting_seasons(player_id);
 CREATE INDEX idx_player_batting_season ON player_batting_seasons(season);
+CREATE INDEX idx_player_position_player_id ON player_position_seasons(player_id);
+CREATE INDEX idx_player_position_season ON player_position_seasons(season);
 CREATE INDEX idx_player_pitching_player_id ON player_pitching_seasons(player_id);
 CREATE INDEX idx_player_pitching_season ON player_pitching_seasons(season);
 CREATE INDEX idx_player_fielding_player_id ON player_fielding_seasons(player_id);
@@ -521,6 +559,7 @@ ALTER TABLE statcast_batting ENABLE ROW LEVEL SECURITY;
 ALTER TABLE game_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE social_posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE player_batting_seasons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE player_position_seasons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE player_pitching_seasons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE player_fielding_seasons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE team_batting_seasons ENABLE ROW LEVEL SECURITY;
@@ -559,6 +598,11 @@ CREATE POLICY "Public can read game logs"
 
 CREATE POLICY "Public can read player batting seasons"
   ON player_batting_seasons FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Public can read player position seasons"
+  ON player_position_seasons FOR SELECT
   TO anon, authenticated
   USING (true);
 
@@ -641,6 +685,6 @@ END $$;
 
 ## Historical season tables (reference)
 
-Season-level totals for players are stored in ``player_batting_seasons``, ``player_pitching_seasons``, and ``player_fielding_seasons``; franchise seasons in ``team_batting_seasons``, ``team_pitching_seasons``, ``team_fielding_seasons``. ``player_id`` / ``team_id`` align with MLBAM ids (soft references; no FK required). Run-environment indices live in ``park_factors`` (``team_id``, ``season``): ``runs_factor`` plus optional component factors (``hr_factor``, ``hits_factor``, etc.), with a unique index for upserts and public read RLS matching other reference tables.
+Season-level totals for players are stored in ``player_batting_seasons``, ``player_pitching_seasons``, and ``player_fielding_seasons``; **per-position batting splits** (when populated) in ``player_position_seasons``; franchise seasons in ``team_batting_seasons``, ``team_pitching_seasons``, ``team_fielding_seasons``. ``player_id`` / ``team_id`` align with MLBAM ids (soft references; no FK required). Run-environment indices live in ``park_factors`` (``team_id``, ``season``): ``runs_factor`` plus optional component factors (``hr_factor``, ``hits_factor``, etc.), with a unique index for upserts and public read RLS matching other reference tables.
 
 Unique indexes support upserts (see DDL above). The player profile API exposes the three player tables as ``historicalBatting``, ``historicalPitching``, and ``historicalFielding`` (newest ``season`` first).

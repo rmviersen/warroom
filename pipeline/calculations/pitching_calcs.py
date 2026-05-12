@@ -50,6 +50,12 @@ def calc_fip(hr: float | None, bb: float | None, so: float | None, ip: float | N
 
 
 def calc_era_plus(era: float | None, season: int, park_factor: float = 1.0) -> float | None:
+    """
+    ERA+ (Baseball Reference): ``100 × (lgERA / ERA) / park_factor``.
+
+    ``lgERA`` comes from ``get_league_averages(season)``. Divide by ``park_factor`` so a pitcher in a
+    hitter-friendly (inflated ERA) park gets credit versus multiplying, which would wrongly penalize them.
+    """
     if era is None or era == 0:
         return None
     lg = get_league_averages(season)
@@ -61,9 +67,12 @@ def calc_era_plus(era: float | None, season: int, park_factor: float = 1.0) -> f
     try:
         le = float(lg_era)
         e = float(era)
+        pf = float(park_factor)
     except (TypeError, ValueError):
         return None
-    return float(100.0 * (le / e) * float(park_factor))
+    if pf == 0:
+        return None
+    return float(100.0 * (le / e) / pf)
 
 
 def calc_lob_pct(h: float | None, bb: float | None, hr: float | None, r: float | None) -> float | None:
