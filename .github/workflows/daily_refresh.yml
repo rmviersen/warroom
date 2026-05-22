@@ -37,39 +37,50 @@ jobs:
           cache: pip
           cache-dependency-path: pipeline/requirements.txt
 
-      - run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
       - name: Write pipeline .env
         run: |
           echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" > .env
           echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" >> .env
 
-      - run: python seed_game_logs.py
-        continue-on-error: false
+      - name: Seed game logs
+        run: python seed_game_logs.py
 
-      - if: ${{ github.event.inputs.skip_statcast != 'true' }}
+      - name: Backfill Statcast pitches
+        if: ${{ github.event.inputs.skip_statcast != 'true' }}
         run: python backfill_statcast.py
         continue-on-error: true
 
-      - run: python aggregate_statcast_batting.py --start-season $SEASON --end-season $SEASON
+      - name: Aggregate Statcast batting
+        run: python aggregate_statcast_batting.py --start-season $SEASON --end-season $SEASON
 
-      - run: python aggregate_statcast_pitching.py --start-season $SEASON --end-season $SEASON
+      - name: Aggregate Statcast pitching
+        run: python aggregate_statcast_pitching.py --start-season $SEASON --end-season $SEASON
 
-      - run: python calc_batting_metrics.py --start-season $SEASON --end-season $SEASON
+      - name: Calculate batting metrics
+        run: python calc_batting_metrics.py --start-season $SEASON --end-season $SEASON
 
-      - run: python calc_pitching_metrics.py --start-season $SEASON --end-season $SEASON
+      - name: Calculate pitching metrics
+        run: python calc_pitching_metrics.py --start-season $SEASON --end-season $SEASON
 
-      - run: python seed_player_batting_seasons.py --season $SEASON
+      - name: Seed player batting seasons
+        run: python seed_player_batting_seasons.py --season $SEASON
         continue-on-error: true
 
-      - run: python seed_player_pitching_seasons.py --season $SEASON
+      - name: Seed player pitching seasons
+        run: python seed_player_pitching_seasons.py --season $SEASON
         continue-on-error: true
 
-      - run: python calc_batting_season_metrics.py --start-season $SEASON --end-season $SEASON
+      - name: Calculate batting season metrics
+        run: python calc_batting_season_metrics.py --start-season $SEASON --end-season $SEASON
 
-      - run: python calc_pitching_season_metrics.py --start-season $SEASON --end-season $SEASON
+      - name: Calculate pitching season metrics
+        run: python calc_pitching_season_metrics.py --start-season $SEASON --end-season $SEASON
 
-      - id: day_check
+      - name: Check if Monday
+        id: day_check
         run: |
           if [ "$(date -u +%u)" -eq 1 ]; then
             echo "is_monday=true" >> "$GITHUB_OUTPUT"
@@ -77,8 +88,10 @@ jobs:
             echo "is_monday=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - if: ${{ steps.day_check.outputs.is_monday == 'true' || github.event_name == 'workflow_dispatch' }}
+      - name: Recalculate league averages
+        if: ${{ steps.day_check.outputs.is_monday == 'true' || github.event_name == 'workflow_dispatch' }}
         run: python calc_league_averages.py --start-season $SEASON --end-season $SEASON
 
-      - if: always()
-        run: echo "Completion summary: season=${SEASON} completed at $(date -u) UTC"
+      - name: Completion summary
+        if: always()
+        run: echo "Refresh complete — season=${SEASON} at $(date -u) UTC"
