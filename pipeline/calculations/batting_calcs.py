@@ -148,7 +148,7 @@ def calc_cqi(
     """
     Contact Quality Index: 100 = league average (``statcast_batting`` / league JSON Statcast fields).
 
-    Uses 40% exit velo, 40% barrel rate, 20% hard-hit vs league ``lgAvgEV``, ``lgBarrelRate``,
+    Uses 35% exit velo, 50% barrel rate, 15% hard-hit vs league ``lgAvgEV``, ``lgBarrelRate``,
     ``lgHardHitRate`` (same units as Savant exports in ``league_averages.json``).
     """
     if season < STATCAST_MIN_SEASON:
@@ -169,7 +169,7 @@ def calc_cqi(
         r_hh = float(hard_hit_rate) / float(lg_hh)
     except (TypeError, ValueError, ZeroDivisionError):
         return None
-    return float(100.0 * (0.4 * r_ev + 0.4 * r_br + 0.2 * r_hh))
+    return float(100.0 * (0.35 * r_ev + 0.5 * r_br + 0.15 * r_hh))
 
 
 # FanGraphs guts page wOBA scale by season (https://www.fangraphs.com/guts.aspx).

@@ -32,6 +32,8 @@ _KEEP_COLUMNS = [
     "pitcher",
     "game_date",
     "game_pk",
+    "at_bat_number",
+    "pitch_number",
     "pitch_type",
     "pitch_name",
     "release_speed",
@@ -52,13 +54,16 @@ _KEEP_COLUMNS = [
     "away_team",
 ]
 
-# Columns allowed on insert (pitcher is dropped — not in schema).
+# Columns allowed on insert (must match statcast_pitches / SCHEMA.md).
 _TABLE_COLUMNS = [
-    "player_id",
-    "player_name",
-    "team_id",
+    "batter_id",
+    "batter_name",
+    "pitcher_id",
+    "pitcher_name",
     "game_date",
     "game_pk",
+    "at_bat_number",
+    "pitch_number",
     "pitch_type",
     "pitch_name",
     "release_speed",
@@ -156,7 +161,11 @@ def _json_safe_value(value: Any) -> Any:
 
 
 def _rows_from_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
-    """Build insert rows: map batter -> player_id, drop pitcher, schema-only keys."""
+    """Build insert rows: Savant ``batter``/``pitcher``/``player_name`` -> schema columns.
+
+    Skips rows missing ``game_pk``, ``at_bat_number``, or ``pitch_number`` (cannot
+    dedupe safely on the upsert conflict target).
+    """
 
     raw_records = df.to_dict(orient="records")
     rows: list[dict[str, Any]] = []
@@ -164,11 +173,20 @@ def _rows_from_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
     for raw in raw_records:
         rec = dict(raw)
         if "batter" in rec:
-            rec["player_id"] = rec.pop("batter")
-        # Not persisted — schema has no pitcher column on statcast_pitches.
-        rec.pop("pitcher", None)
+            rec["batter_id"] = rec.pop("batter")
+        if "pitcher" in rec:
+            rec["pitcher_id"] = rec.pop("pitcher")
+        if "player_name" in rec:
+            rec["pitcher_name"] = rec.pop("player_name")
+        rec["batter_name"] = None
 
         row = {col: _json_safe_value(rec.get(col)) for col in _TABLE_COLUMNS}
+        if (
+            row.get("game_pk") is None
+            or row.get("at_bat_number") is None
+            or row.get("pitch_number") is None
+        ):
+            continue
         rows.append(row)
 
     return rows
@@ -177,6 +195,9 @@ def _rows_from_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
 def upsert_statcast(df: pd.DataFrame) -> None:
     """
     Load cleaned Statcast rows into ``statcast_pitches`` via batched upsert.
+
+    Conflicts resolve on ``(game_pk, at_bat_number, pitch_number)`` (see
+    ``statcast_pitches_game_atbat_pitch_key`` in SCHEMA.md).
 
     Prints aggregate success and failure row counts (failures count full batch
     size when a batch raises).
@@ -196,7 +217,10 @@ def upsert_statcast(df: pd.DataFrame) -> None:
         batch = records[i : i + _INSERT_BATCH_SIZE]
         batch_no = i // _INSERT_BATCH_SIZE + 1
         try:
-            table.upsert(batch).execute()
+            table.upsert(
+                batch,
+                on_conflict="game_pk,at_bat_number,pitch_number",
+            ).execute()
             ok += len(batch)
         except Exception as exc:  # noqa: BLE001
             print(f"upsert_statcast: batch {batch_no} failed: {exc}")

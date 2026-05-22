@@ -63,7 +63,11 @@ export interface PlayerBattingSeasonRow {
   ops_plus: number | null;
   woba: number | null;
   wrc_plus: number | null;
-  war: number | null;
+  bwpr: number | null;
+  fwpr: number | null;
+  brwpr: number | null;
+  wpr: number | null;
+  cqi: number | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -100,8 +104,9 @@ export interface PlayerPitchingSeasonRow {
   hr_per_9: number | null;
   k_bb: number | null;
   era_plus: number | null;
-  war: number | null;
+  pwpr: number | null;
   lob_pct: number | null;
+  stuff_plus: number | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -124,6 +129,7 @@ export interface PlayerFieldingSeasonRow {
   dp: number | null;
   fld_pct: number | null;
   rf_per_9: number | null;
+  rf_per_g: number | null;
   drs: number | null;
   oaa: number | null;
   created_at?: string | null;
@@ -158,8 +164,9 @@ export interface TeamBattingSeasonRow {
   babip: number | null;
   iso: number | null;
   woba: number | null;
+  ops_plus: number | null;
   wrc_plus: number | null;
-  war: number | null;
+  bwpr: number | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -193,7 +200,7 @@ export interface TeamPitchingSeasonRow {
   bb_per_9: number | null;
   hr_per_9: number | null;
   era_plus: number | null;
-  war: number | null;
+  pwpr: number | null;
   created_at?: string | null;
   updated_at?: string | null;
 }
@@ -388,6 +395,8 @@ export interface PlayerProfileApiResponse {
   historicalBatting: PlayerBattingSeasonRow[];
   historicalPitching: PlayerPitchingSeasonRow[];
   historicalFielding: PlayerFieldingSeasonRow[];
+  batterPercentiles: Record<string, unknown> | null;
+  pitcherPercentiles: Record<string, unknown> | null;
 }
 
 /** GET /api/players/[id]/pitches JSON body. */
@@ -413,6 +422,8 @@ export interface StatcastBatting {
   xslg: number | null;
   xwoba: number | null;
   sprint_speed: number | null;
+  /** Contact Quality Index (100 = league average); see SCHEMA.md / batting_calcs.calc_cqi. */
+  cqi: number | null;
   updated_at?: string | null;
 }
 
@@ -425,11 +436,14 @@ export interface StatcastBattingLeaderboardRow extends StatcastBatting {
 /** Row in statcast_pitches (SCHEMA.md). */
 export interface StatcastPitch {
   id: number;
-  player_id: number | null;
-  player_name: string | null;
-  team_id: number | null;
+  batter_id: number | null;
+  batter_name: string | null;
+  pitcher_id: number | null;
+  pitcher_name: string | null;
   game_date: string | null;
   game_pk: number | null;
+  at_bat_number: number | null;
+  pitch_number: number | null;
   pitch_type: string | null;
   pitch_name: string | null;
   release_speed: number | null;

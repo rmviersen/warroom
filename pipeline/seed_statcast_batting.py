@@ -26,6 +26,7 @@ from pybaseball import statcast_batter_exitvelo_barrels, statcast_batter_expecte
 from pybaseball.statcast_running import statcast_sprint_speed
 
 import config  # noqa: F401 — load .env via side effect
+from calculations.batting_calcs import calc_cqi
 from db import get_client
 
 _NAME_COL = "last_name, first_name"
@@ -220,22 +221,29 @@ def _row_to_supabase(rec: dict[str, Any]) -> dict[str, Any] | None:
         except (TypeError, ValueError):
             return None
 
-    return {
+    avg_exit_velocity = num(rec.get("avg_exit_velocity"))
+    barrel_rate = num(rec.get("barrel_rate"))
+    hard_hit_rate = num(rec.get("hard_hit_rate"))
+
+    out = {
         "player_id": int(pid),
         "player_name": name,
         "team_id": team_id,
         "season": season_i,
         "pa": as_int(rec.get("pa")),
-        "avg_exit_velocity": num(rec.get("avg_exit_velocity")),
+        "avg_exit_velocity": avg_exit_velocity,
         "max_exit_velocity": num(rec.get("max_exit_velocity")),
         "avg_launch_angle": num(rec.get("avg_launch_angle")),
-        "barrel_rate": num(rec.get("barrel_rate")),
-        "hard_hit_rate": num(rec.get("hard_hit_rate")),
+        "barrel_rate": barrel_rate,
+        "hard_hit_rate": hard_hit_rate,
         "xba": num(rec.get("xba")),
         "xslg": num(rec.get("xslg")),
         "xwoba": num(rec.get("xwoba")),
         "sprint_speed": num(rec.get("sprint_speed")),
     }
+    cqi = calc_cqi(avg_exit_velocity, barrel_rate, hard_hit_rate, season_i)
+    out["cqi"] = round(cqi, 2) if cqi is not None else None
+    return out
 
 
 def upsert_statcast_batting(

@@ -18,12 +18,16 @@ function toNum(v: unknown): number | null {
 function mapPitchRow(row: Record<string, unknown>): StatcastPitch {
   return {
     id: toNum(row.id) ?? 0,
-    player_id: toNum(row.player_id),
-    player_name:
-      row.player_name == null ? null : String(row.player_name),
-    team_id: toNum(row.team_id),
+    batter_id: toNum(row.batter_id),
+    batter_name:
+      row.batter_name == null ? null : String(row.batter_name),
+    pitcher_id: toNum(row.pitcher_id),
+    pitcher_name:
+      row.pitcher_name == null ? null : String(row.pitcher_name),
     game_date: row.game_date == null ? null : String(row.game_date),
     game_pk: toNum(row.game_pk),
+    at_bat_number: toNum(row.at_bat_number),
+    pitch_number: toNum(row.pitch_number),
     pitch_type:
       row.pitch_type == null ? null : String(row.pitch_type),
     pitch_name:
@@ -76,8 +80,39 @@ export async function GET(
   try {
     let q = supabase
       .from("statcast_pitches")
-      .select("*")
-      .eq("player_id", playerId)
+      .select(
+        `
+        id,
+        batter_id,
+        batter_name,
+        pitcher_id,
+        pitcher_name,
+        game_date,
+        game_pk,
+        at_bat_number,
+        pitch_number,
+        pitch_type,
+        pitch_name,
+        release_speed,
+        release_spin_rate,
+        pfx_x,
+        pfx_z,
+        plate_x,
+        plate_z,
+        launch_angle,
+        launch_speed,
+        hit_distance,
+        events,
+        description,
+        zone,
+        stand,
+        p_throws,
+        home_team,
+        away_team,
+        created_at
+      `,
+      )
+      .eq("batter_id", playerId)
       .order("created_at", { ascending: false })
       .limit(200);
 

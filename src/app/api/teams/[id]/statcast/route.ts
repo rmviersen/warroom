@@ -52,6 +52,7 @@ function mapRow(r: Record<string, unknown>): StatcastBatting {
     xslg: toNum(r.xslg),
     xwoba: toNum(r.xwoba),
     sprint_speed: toNum(r.sprint_speed),
+    cqi: toNum(r.cqi),
     updated_at:
       r.updated_at == null ? null : String(r.updated_at),
   };

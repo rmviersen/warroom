@@ -81,6 +81,7 @@ function mapStatcastBattingRow(row: Record<string, unknown>): StatcastBatting {
     xslg: toNum(row.xslg),
     xwoba: toNum(row.xwoba),
     sprint_speed: toNum(row.sprint_speed),
+    cqi: toNum(row.cqi),
     updated_at:
       row.updated_at == null ? null : String(row.updated_at),
   };
@@ -107,6 +108,8 @@ export async function GET(
       batHist,
       pitHist,
       fldHist,
+      batterPctResult,
+      pitcherPctResult,
     ] = await Promise.all([
       mlbFetch(endpoint) as Promise<{ people?: unknown[] }>,
       supabase
@@ -131,6 +134,14 @@ export async function GET(
         .select("*")
         .eq("player_id", playerId)
         .order("season", { ascending: false }),
+      supabase.rpc("get_batter_statcast_percentiles", {
+        p_player_id: playerId,
+        p_season: season,
+      }),
+      supabase.rpc("get_pitcher_statcast_percentiles", {
+        p_pitcher_id: playerId,
+        p_season: season,
+      }),
     ]);
 
     const people = mlbJson.people;
@@ -179,6 +190,19 @@ export async function GET(
       console.error("player_fielding_seasons:", fldHist.error.message);
     }
 
+    if (batterPctResult.error) {
+      console.error(
+        "get_batter_statcast_percentiles:",
+        batterPctResult.error.message,
+      );
+    }
+    if (pitcherPctResult.error) {
+      console.error(
+        "get_pitcher_statcast_percentiles:",
+        pitcherPctResult.error.message,
+      );
+    }
+
     const supabasePlayer = plResult.data
       ? mapPlayersRow(plResult.data as Record<string, unknown>)
       : null;
@@ -193,6 +217,8 @@ export async function GET(
       historicalBatting: (batHist.data ?? []) as PlayerBattingSeasonRow[],
       historicalPitching: (pitHist.data ?? []) as PlayerPitchingSeasonRow[],
       historicalFielding: (fldHist.data ?? []) as PlayerFieldingSeasonRow[],
+      batterPercentiles: batterPctResult.data ?? null,
+      pitcherPercentiles: pitcherPctResult.data ?? null,
     };
 
     return NextResponse.json(body);

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import BatterStatcastSection from "@/components/ui/BatterStatcastSection";
+import PitcherStatcastSection from "@/components/ui/PitcherStatcastSection";
 import type {
   PlayerBattingSeasonRow,
   PlayerFieldingSeasonRow,
@@ -13,66 +15,6 @@ import type {
   PlayerRow,
   StatcastPitch,
 } from "@/types";
-
-type StatTier = "elite" | "average" | "below";
-
-function normalizePercent(v: number | null): number | null {
-  if (v == null || Number.isNaN(v)) return null;
-  return v <= 1 ? v * 100 : v;
-}
-
-function tierExitVelo(mph: number | null): StatTier | null {
-  if (mph == null) return null;
-  if (mph >= 91) return "elite";
-  if (mph >= 87) return "average";
-  return "below";
-}
-
-function tierBarrel(pct: number | null): StatTier | null {
-  if (pct == null) return null;
-  if (pct >= 12) return "elite";
-  if (pct >= 7) return "average";
-  return "below";
-}
-
-function tierHardHit(pct: number | null): StatTier | null {
-  if (pct == null) return null;
-  if (pct >= 46) return "elite";
-  if (pct >= 36) return "average";
-  return "below";
-}
-
-function tierXwoba(x: number | null): StatTier | null {
-  if (x == null) return null;
-  if (x >= 0.37) return "elite";
-  if (x >= 0.32) return "average";
-  return "below";
-}
-
-function tierSprint(fps: number | null): StatTier | null {
-  if (fps == null) return null;
-  if (fps >= 29) return "elite";
-  if (fps >= 27.8) return "average";
-  return "below";
-}
-
-function tierClass(t: StatTier | null): string {
-  if (!t) return "border-gray-800 bg-gray-900/40 text-gray-300";
-  if (t === "elite") {
-    return "border-emerald-600/50 bg-emerald-950/25 text-emerald-200";
-  }
-  if (t === "average") {
-    return "border-amber-600/40 bg-amber-950/20 text-amber-100";
-  }
-  return "border-red-800/50 bg-red-950/25 text-red-200";
-}
-
-function formatPercentish(v: number | null): string {
-  if (v == null) return "—";
-  const p = normalizePercent(v);
-  if (p == null) return "—";
-  return `${p.toFixed(1)}%`;
-}
 
 function supabaseBioHasDisplayData(row: PlayerRow | null): boolean {
   if (!row) return false;
@@ -123,27 +65,26 @@ function DatabaseBioPanel({ row }: { row: PlayerRow }) {
   if (rows.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-800 bg-gray-950/50">
-        <h2 className="text-sm font-semibold text-white">Bio · database</h2>
-        <p className="text-xs text-gray-500 mt-0.5">
+    <div className="rounded-xl border border-[#d0daea] bg-[#f4f7fb] overflow-hidden">
+      <div className="px-4 py-3 border-b border-[#d0daea] bg-[#f4f7fb]">
+        <h2 className="text-sm font-semibold text-[#0f2044]">Bio · database</h2>
+        <p className="text-xs text-[#7a8fa8] mt-0.5">
           From your Supabase players row (historical / roster cache).
         </p>
       </div>
       <table className="w-full text-sm">
-        <tbody>
+        <tbody className="divide-y divide-[#f0f4f9]">
           {rows.map((r) => (
-            <tr
-              key={r.label}
-              className="border-t border-gray-800/80 first:border-t-0"
-            >
+            <tr key={r.label}>
               <th
                 scope="row"
-                className="py-3 px-4 text-left font-medium text-gray-400 w-2/5"
+                className="py-3 px-4 text-left font-medium text-[#7a8fa8] w-2/5"
               >
                 {r.label}
               </th>
-              <td className="py-3 px-4 text-right text-gray-200">{r.value}</td>
+              <td className="py-3 px-4 text-right font-mono tabular-nums text-[#1e3050]">
+                {r.value}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -173,43 +114,43 @@ function HistoricalSeasonsSection({
   return (
     <section className="space-y-5">
       <div>
-        <h2 className="text-sm font-semibold text-white">
+        <h2 className="text-sm font-semibold text-[#0f2044]">
           Historical seasons · database
         </h2>
-        <p className="text-xs text-gray-500 mt-0.5">
+        <p className="text-xs text-[#7a8fa8] mt-0.5">
           Season totals from Supabase (newest year first).
         </p>
       </div>
 
       {batting.length > 0 ? (
-        <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
-          <div className="px-4 py-2 border-b border-gray-800 bg-gray-950/50 text-xs font-medium text-gray-400">
+        <div className="rounded-xl border border-[#d0daea] bg-white overflow-hidden">
+          <div className="px-4 py-2 border-b border-[#d0daea] bg-[#f4f7fb] text-xs font-semibold text-[#0f2044]">
             Batting
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[640px]">
               <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-800">
-                  <th className="py-2 px-3 font-medium">Year</th>
-                  <th className="py-2 px-3 font-medium">Team</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">PA</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">AVG</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">OBP</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">SLG</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">OPS</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">HR</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">wRC+</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">WAR</th>
+                <tr className="text-left text-[#7a8fa8] bg-[#f4f7fb] border-b border-[#f0f4f9]">
+                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Year</th>
+                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Team</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">PA</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">AVG</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">OBP</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">SLG</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">OPS</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">HR</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">wRC+</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-semibold text-[#b8922a]">bWPR</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[#f0f4f9] text-[#1e3050]">
                 {batting.map((r) => (
                   <tr
                     key={`${r.id}-bat`}
-                    className="border-b border-gray-800/80 text-gray-200"
+                    className="bg-white hover:bg-[#f4f7fb] transition-colors"
                   >
-                    <td className="py-2 px-3 font-mono">{r.season}</td>
-                    <td className="py-2 px-3 max-w-[140px] truncate">
+                    <td className="py-2 px-3 font-mono tabular-nums">{r.season}</td>
+                    <td className="py-2 px-3 max-w-[140px] truncate text-[#7a8fa8]">
                       {r.team ?? "—"}
                     </td>
                     <td className="py-2 px-3 font-mono tabular-nums">
@@ -234,7 +175,7 @@ function HistoricalSeasonsSection({
                       {r.wrc_plus ?? "—"}
                     </td>
                     <td className="py-2 px-3 font-mono tabular-nums">
-                      {fmtSlash(r.war, 1)}
+                      {fmtSlash(r.bwpr, 1)}
                     </td>
                   </tr>
                 ))}
@@ -245,33 +186,33 @@ function HistoricalSeasonsSection({
       ) : null}
 
       {pitching.length > 0 ? (
-        <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
-          <div className="px-4 py-2 border-b border-gray-800 bg-gray-950/50 text-xs font-medium text-gray-400">
+        <div className="rounded-xl border border-[#d0daea] bg-white overflow-hidden">
+          <div className="px-4 py-2 border-b border-[#d0daea] bg-[#f4f7fb] text-xs font-semibold text-[#0f2044]">
             Pitching
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[600px]">
               <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-800">
-                  <th className="py-2 px-3 font-medium">Year</th>
-                  <th className="py-2 px-3 font-medium">Team</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">IP</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">ERA</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">WHIP</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">SO</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">BB</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">FIP</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">WAR</th>
+                <tr className="text-left text-[#7a8fa8] bg-[#f4f7fb] border-b border-[#f0f4f9]">
+                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Year</th>
+                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Team</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">IP</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">ERA</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">WHIP</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">SO</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">BB</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">FIP</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-semibold text-[#b8922a]">pWPR</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[#f0f4f9] text-[#1e3050]">
                 {pitching.map((r) => (
                   <tr
                     key={`${r.id}-pit`}
-                    className="border-b border-gray-800/80 text-gray-200"
+                    className="bg-white hover:bg-[#f4f7fb] transition-colors"
                   >
-                    <td className="py-2 px-3 font-mono">{r.season}</td>
-                    <td className="py-2 px-3 max-w-[140px] truncate">
+                    <td className="py-2 px-3 font-mono tabular-nums">{r.season}</td>
+                    <td className="py-2 px-3 max-w-[140px] truncate text-[#7a8fa8]">
                       {r.team ?? "—"}
                     </td>
                     <td className="py-2 px-3 font-mono tabular-nums">
@@ -293,7 +234,7 @@ function HistoricalSeasonsSection({
                       {fmtSlash(r.fip, 2)}
                     </td>
                     <td className="py-2 px-3 font-mono tabular-nums">
-                      {fmtSlash(r.war, 1)}
+                      {fmtSlash(r.pwpr, 1)}
                     </td>
                   </tr>
                 ))}
@@ -304,33 +245,33 @@ function HistoricalSeasonsSection({
       ) : null}
 
       {fielding.length > 0 ? (
-        <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
-          <div className="px-4 py-2 border-b border-gray-800 bg-gray-950/50 text-xs font-medium text-gray-400">
+        <div className="rounded-xl border border-[#d0daea] bg-white overflow-hidden">
+          <div className="px-4 py-2 border-b border-[#d0daea] bg-[#f4f7fb] text-xs font-semibold text-[#0f2044]">
             Fielding
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[520px]">
               <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-800">
-                  <th className="py-2 px-3 font-medium">Year</th>
-                  <th className="py-2 px-3 font-medium">Team</th>
-                  <th className="py-2 px-3 font-medium">Pos</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">Inn</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">DRS</th>
-                  <th className="py-2 px-3 font-mono tabular-nums">OAA</th>
+                <tr className="text-left text-[#7a8fa8] bg-[#f4f7fb] border-b border-[#f0f4f9]">
+                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Year</th>
+                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Team</th>
+                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Pos</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">Inn</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">DRS</th>
+                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">OAA</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[#f0f4f9] text-[#1e3050]">
                 {fielding.map((r) => (
                   <tr
                     key={`${r.id}-fld`}
-                    className="border-b border-gray-800/80 text-gray-200"
+                    className="bg-white hover:bg-[#f4f7fb] transition-colors"
                   >
-                    <td className="py-2 px-3 font-mono">{r.season}</td>
-                    <td className="py-2 px-3 max-w-[140px] truncate">
+                    <td className="py-2 px-3 font-mono tabular-nums">{r.season}</td>
+                    <td className="py-2 px-3 max-w-[140px] truncate text-[#7a8fa8]">
                       {r.team ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono">
+                    <td className="py-2 px-3 font-mono text-[#7a8fa8]">
                       {r.position ?? "—"}
                     </td>
                     <td className="py-2 px-3 font-mono tabular-nums">
@@ -366,16 +307,16 @@ function PersonHeader({
   const teamName = team?.name ?? "—";
 
   return (
-    <header className="space-y-2 border-b border-gray-800 pb-6">
-      <p className="text-xs font-medium uppercase tracking-wider text-gray-500">
+    <header className="space-y-2 border-b border-[#d0daea] pb-6">
+      <p className="text-xs font-medium uppercase tracking-wider text-[#7a8fa8]">
         {teamName}
       </p>
-      <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
+      <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-[#0f2044]">
         {fullName}
       </h1>
-      <p className="text-sm text-gray-400">
+      <p className="text-sm text-[#7a8fa8]">
         Position{" "}
-        <span className="font-mono text-gray-200">{position}</span>
+        <span className="font-mono tabular-nums text-[#7a8fa8]">{position}</span>
       </p>
     </header>
   );
@@ -390,7 +331,7 @@ function HittingTable({
 }) {
   if (!stats) {
     return (
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-[#7a8fa8]">
         No season hitting splits in MLB Stats API for {season}.
       </p>
     );
@@ -404,26 +345,23 @@ function HittingTable({
   ];
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-800 bg-gray-950/50">
-        <h2 className="text-sm font-semibold text-white">
+    <div className="rounded-xl border border-[#d0daea] bg-[#f4f7fb] overflow-hidden">
+      <div className="px-4 py-3 border-b border-[#d0daea] bg-[#f4f7fb]">
+        <h2 className="text-sm font-semibold text-[#0f2044]">
           Traditional · {season} batting
         </h2>
       </div>
       <table className="w-full text-sm">
-        <tbody>
+        <tbody className="divide-y divide-[#f0f4f9]">
           {rows.map((r) => (
-            <tr
-              key={r.label}
-              className="border-t border-gray-800/80 first:border-t-0"
-            >
+            <tr key={r.label}>
               <th
                 scope="row"
-                className="py-3 px-4 text-left font-medium text-gray-400 w-1/3"
+                className="py-3 px-4 text-left font-medium text-[#7a8fa8] w-1/3"
               >
                 {r.label}
               </th>
-              <td className="py-3 px-4 text-right font-mono text-white tabular-nums">
+              <td className="py-3 px-4 text-right font-mono tabular-nums text-[#1e3050]">
                 {r.value}
               </td>
             </tr>
@@ -443,7 +381,7 @@ function PitchingTable({
 }) {
   if (!stats) {
     return (
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-[#7a8fa8]">
         No season pitching splits in MLB Stats API for {season}.
       </p>
     );
@@ -458,26 +396,23 @@ function PitchingTable({
   ];
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-hidden">
-      <div className="px-4 py-3 border-b border-gray-800 bg-gray-950/50">
-        <h2 className="text-sm font-semibold text-white">
+    <div className="rounded-xl border border-[#d0daea] bg-[#f4f7fb] overflow-hidden">
+      <div className="px-4 py-3 border-b border-[#d0daea] bg-[#f4f7fb]">
+        <h2 className="text-sm font-semibold text-[#0f2044]">
           Traditional · {season} pitching
         </h2>
       </div>
       <table className="w-full text-sm">
-        <tbody>
+        <tbody className="divide-y divide-[#f0f4f9]">
           {rows.map((r) => (
-            <tr
-              key={r.label}
-              className="border-t border-gray-800/80 first:border-t-0"
-            >
+            <tr key={r.label}>
               <th
                 scope="row"
-                className="py-3 px-4 text-left font-medium text-gray-400 w-1/3"
+                className="py-3 px-4 text-left font-medium text-[#7a8fa8] w-1/3"
               >
                 {r.label}
               </th>
-              <td className="py-3 px-4 text-right font-mono text-white tabular-nums">
+              <td className="py-3 px-4 text-right font-mono tabular-nums text-[#1e3050]">
                 {r.value}
               </td>
             </tr>
@@ -488,53 +423,18 @@ function PitchingTable({
   );
 }
 
-function StatCard({
-  label,
-  display,
-  tier,
-}: {
-  label: string;
-  display: string;
-  tier: StatTier | null;
-}) {
-  const tierLabel =
-    tier === "elite"
-      ? "Elite"
-      : tier === "average"
-        ? "Average"
-        : tier === "below"
-          ? "Below avg"
-          : null;
-
-  return (
-    <div
-      className={`rounded-xl border px-4 py-4 transition-colors ${tierClass(tier)}`}
-    >
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight">
-        {display}
-      </p>
-      {tierLabel ? (
-        <p className="mt-1 text-xs text-gray-400">{tierLabel}</p>
-      ) : null}
-    </div>
-  );
-}
-
 function PitchesTable({ pitches }: { pitches: StatcastPitch[] }) {
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900/40 overflow-x-auto">
-      <div className="px-4 py-3 border-b border-gray-800 bg-gray-950/50 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-white">
+    <div className="rounded-xl border border-[#d0daea] bg-white overflow-x-auto">
+      <div className="px-4 py-3 border-b border-[#d0daea] bg-[#f4f7fb] flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-[#0f2044]">
           Last 10 pitches / batted balls
         </h2>
-        <p className="text-xs text-gray-500">Most recent by ingest time</p>
+        <p className="text-xs text-[#7a8fa8]">Most recent by ingest time</p>
       </div>
       <table className="min-w-full text-xs sm:text-sm">
         <thead>
-          <tr className="text-left text-gray-500 border-b border-gray-800">
+          <tr className="text-left text-[#7a8fa8] bg-[#f4f7fb] border-b border-[#f0f4f9]">
             <th className="py-2 px-3 font-medium">Date</th>
             <th className="py-2 px-3 font-medium">Pitch</th>
             <th className="py-2 px-3 font-medium">Velo</th>
@@ -547,28 +447,28 @@ function PitchesTable({ pitches }: { pitches: StatcastPitch[] }) {
             <th className="py-2 px-3 font-medium">Event</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-[#f0f4f9] text-[#1e3050]">
           {pitches.map((p) => (
             <tr
               key={p.id}
-              className="border-b border-gray-800/80 last:border-0 text-gray-200"
+              className="bg-white hover:bg-[#f4f7fb] transition-colors"
             >
-              <td className="py-2 px-3 whitespace-nowrap font-mono text-gray-400">
+              <td className="py-2 px-3 whitespace-nowrap font-mono tabular-nums text-[#7a8fa8]">
                 {p.game_date ?? "—"}
               </td>
-              <td className="py-2 px-3">
+              <td className="py-2 px-3 text-[#1e3050]">
                 {p.pitch_name ?? p.pitch_type ?? "—"}
               </td>
-              <td className="py-2 px-3 font-mono tabular-nums">
+              <td className="py-2 px-3 font-mono tabular-nums text-[#1e3050]">
                 {p.release_speed != null ? `${p.release_speed.toFixed(1)}` : "—"}
               </td>
-              <td className="py-2 px-3 font-mono tabular-nums hidden sm:table-cell">
+              <td className="py-2 px-3 font-mono tabular-nums hidden sm:table-cell text-[#1e3050]">
                 {p.launch_angle != null ? `${p.launch_angle.toFixed(0)}°` : "—"}
               </td>
-              <td className="py-2 px-3 font-mono tabular-nums hidden sm:table-cell">
+              <td className="py-2 px-3 font-mono tabular-nums hidden sm:table-cell text-[#1e3050]">
                 {p.launch_speed != null ? `${p.launch_speed.toFixed(1)}` : "—"}
               </td>
-              <td className="py-2 px-3 max-w-[140px] sm:max-w-xs truncate text-gray-300">
+              <td className="py-2 px-3 max-w-[140px] sm:max-w-xs truncate text-[#1e3050]">
                 {p.events ?? p.description ?? "—"}
               </td>
             </tr>
@@ -640,16 +540,6 @@ export default function PlayerProfilePage() {
   }, [load]);
 
   const season = profile?.mlbStats?.season ?? new Date().getFullYear();
-  const sc = profile?.statcastBatting;
-  const ev = sc?.avg_exit_velocity != null ? Number(sc.avg_exit_velocity) : null;
-  const barrelPct = normalizePercent(
-    sc?.barrel_rate != null ? Number(sc.barrel_rate) : null,
-  );
-  const hardPct = normalizePercent(
-    sc?.hard_hit_rate != null ? Number(sc.hard_hit_rate) : null,
-  );
-  const xw = sc?.xwoba != null ? Number(sc.xwoba) : null;
-  const sprint = sc?.sprint_speed != null ? Number(sc.sprint_speed) : null;
 
   const topPitches = pitches.slice(0, 10);
 
@@ -662,30 +552,30 @@ export default function PlayerProfilePage() {
     profile?.mlbStats?.isPitcherPrimary ?? primaryCode === "1";
 
   return (
-    <div className="max-w-6xl mx-auto space-y-10">
+    <div className="bg-white text-[#1e3050] max-w-6xl mx-auto space-y-10">
       <p className="text-xs font-black tracking-tight">
-        <span className="text-red-500">WAR</span>
-        <span className="text-white">room</span>
+        <span className="text-[#b8922a]">WAR</span>
+        <span className="text-[#0f2044]">room</span>
       </p>
       <nav className="text-sm">
         <Link
           href="/players"
-          className="text-red-400 hover:text-red-300 transition-colors"
+          className="text-[#1e3a6b] hover:text-[#b8922a] transition-colors"
         >
           ← Players
         </Link>
       </nav>
 
       {loading ? (
-        <div className="rounded-xl border border-gray-800 bg-gray-900/40 py-20 flex flex-col items-center justify-center gap-3">
-          <div className="h-10 w-10 rounded-full border-2 border-red-500 border-t-transparent animate-spin" />
-          <p className="text-sm text-gray-500">Loading profile…</p>
+        <div className="rounded-xl border border-[#d0daea] bg-[#f4f7fb] py-20 flex flex-col items-center justify-center gap-3">
+          <div className="h-10 w-10 rounded-full border-2 border-[#1e3a6b] border-t-transparent animate-spin" />
+          <p className="text-sm text-[#7a8fa8]">Loading profile…</p>
         </div>
       ) : null}
 
       {!loading && error ? (
         <div
-          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-red-200 text-sm"
+          className="rounded-xl border border-[#d0daea] bg-[#f4f7fb] px-4 py-3 text-[#0f2044] text-sm"
           role="alert"
         >
           {error}
@@ -724,47 +614,16 @@ export default function PlayerProfilePage() {
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-gray-400">
-                Statcast · {season}
-              </h2>
-              {!sc ? (
-                <p className="text-sm text-gray-500 rounded-xl border border-gray-800 bg-gray-900/30 px-4 py-8 text-center">
-                  No Statcast batting row for this player in {season}.
-                </p>
+              {isPitcherPrimary ? (
+                <PitcherStatcastSection
+                  pitcherPercentiles={profile.pitcherPercentiles}
+                  season={season}
+                />
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <StatCard
-                    label="Avg exit velo"
-                    display={ev != null ? `${ev.toFixed(1)} mph` : "—"}
-                    tier={tierExitVelo(ev)}
-                  />
-                  <StatCard
-                    label="Barrel rate"
-                    display={formatPercentish(
-                      sc.barrel_rate != null ? Number(sc.barrel_rate) : null,
-                    )}
-                    tier={tierBarrel(barrelPct)}
-                  />
-                  <StatCard
-                    label="Hard-hit rate"
-                    display={formatPercentish(
-                      sc.hard_hit_rate != null ? Number(sc.hard_hit_rate) : null,
-                    )}
-                    tier={tierHardHit(hardPct)}
-                  />
-                  <StatCard
-                    label="xwOBA"
-                    display={xw != null ? xw.toFixed(3) : "—"}
-                    tier={tierXwoba(xw)}
-                  />
-                  <StatCard
-                    label="Sprint speed"
-                    display={
-                      sprint != null ? `${sprint.toFixed(1)} ft/s` : "—"
-                    }
-                    tier={tierSprint(sprint)}
-                  />
-                </div>
+                <BatterStatcastSection
+                  batterPercentiles={profile.batterPercentiles}
+                  season={season}
+                />
               )}
             </section>
           </div>
@@ -772,7 +631,7 @@ export default function PlayerProfilePage() {
           {topPitches.length > 0 ? (
             <PitchesTable pitches={topPitches} />
           ) : (
-            <p className="text-sm text-gray-500 text-center py-8 border border-dashed border-gray-800 rounded-xl">
+            <p className="text-sm text-[#7a8fa8] text-center py-8 border border-dashed border-[#d0daea] rounded-xl bg-[#f4f7fb]">
               No pitch or batted-ball rows in Supabase for this player yet.
             </p>
           )}

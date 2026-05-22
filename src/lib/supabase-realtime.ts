@@ -28,12 +28,16 @@ function mapRealtimePitchRow(
 ): StatcastPitch {
   return {
     id: toNum(record.id) ?? 0,
-    player_id: toNum(record.player_id),
-    player_name:
-      record.player_name == null ? null : String(record.player_name),
-    team_id: toNum(record.team_id),
+    batter_id: toNum(record.batter_id),
+    batter_name:
+      record.batter_name == null ? null : String(record.batter_name),
+    pitcher_id: toNum(record.pitcher_id),
+    pitcher_name:
+      record.pitcher_name == null ? null : String(record.pitcher_name),
     game_date: record.game_date == null ? null : String(record.game_date),
     game_pk: toNum(record.game_pk),
+    at_bat_number: toNum(record.at_bat_number),
+    pitch_number: toNum(record.pitch_number),
     pitch_type:
       record.pitch_type == null ? null : String(record.pitch_type),
     pitch_name:
