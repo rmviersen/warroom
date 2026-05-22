@@ -1,0 +1,84 @@
+name: Daily Data Refresh
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: MLB season year
+        required: false
+        default: "2026"
+        type: string
+      skip_statcast:
+        description: Skip Statcast backfill step when true
+        required: false
+        default: "false"
+        type: string
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    defaults:
+      run:
+        working-directory: pipeline
+
+    env:
+      SEASON: ${{ github.event.inputs.season || '2026' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pipeline/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Write pipeline .env
+        run: |
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" > .env
+          echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" >> .env
+
+      - run: python seed_game_logs.py
+        continue-on-error: false
+
+      - if: ${{ github.event.inputs.skip_statcast != 'true' }}
+        run: python backfill_statcast.py
+        continue-on-error: true
+
+      - run: python aggregate_statcast_batting.py --start-season $SEASON --end-season $SEASON
+
+      - run: python aggregate_statcast_pitching.py --start-season $SEASON --end-season $SEASON
+
+      - run: python calc_batting_metrics.py --start-season $SEASON --end-season $SEASON
+
+      - run: python calc_pitching_metrics.py --start-season $SEASON --end-season $SEASON
+
+      - run: python seed_player_batting_seasons.py --season $SEASON
+        continue-on-error: true
+
+      - run: python seed_player_pitching_seasons.py --season $SEASON
+        continue-on-error: true
+
+      - run: python calc_batting_season_metrics.py --start-season $SEASON --end-season $SEASON
+
+      - run: python calc_pitching_season_metrics.py --start-season $SEASON --end-season $SEASON
+
+      - id: day_check
+        run: |
+          if [ "$(date -u +%u)" -eq 1 ]; then
+            echo "is_monday=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_monday=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: ${{ steps.day_check.outputs.is_monday == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: python calc_league_averages.py --start-season $SEASON --end-season $SEASON
+
+      - if: always()
+        run: echo "Completion summary: season=${SEASON} completed at $(date -u) UTC"
