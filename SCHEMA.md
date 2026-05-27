@@ -460,6 +460,27 @@ CREATE TABLE team_fielding_seasons (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Statcast sprint speed / running leaderboard by player and season (2015+).
+-- player_id: MLBAM id, soft reference to players.id (no FK).
+-- Seeded by pipeline/seed_statcast_running.py from Savant sprint speed leaderboard.
+-- Consumed by calc_baserunning_season_metrics.py for the sprint-speed component of brWPR.
+CREATE TABLE statcast_running (
+  id               BIGSERIAL PRIMARY KEY,
+  player_id        BIGINT        NOT NULL,
+  player_name      TEXT,
+  team_id          BIGINT,
+  team             TEXT,
+  season           INTEGER       NOT NULL,
+  position         TEXT,
+  age              INTEGER,
+  sprint_speed     NUMERIC(5,2),
+  hp_to_1b         NUMERIC(5,3),
+  bolts            INTEGER,
+  competitive_runs INTEGER,
+  bolt_rate        NUMERIC(7,4),
+  updated_at       TIMESTAMPTZ   DEFAULT NOW()
+);
+
 -- Park factors by franchise and season (``team_id``: MLBAM id, soft reference to ``teams.id``).
 -- ``runs_factor`` (formerly ``park_factor``) and component factors scale are left to the ETL / app
 -- (e.g. FanGraphs-style index ÷100 vs 1.0 neutral multiplier). See migration
