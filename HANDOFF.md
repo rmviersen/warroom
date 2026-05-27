@@ -277,7 +277,7 @@ Types: **`src/types/index.ts`**.
 - **Single writer discipline:** Respect **`SCHEMA.md`** splits (e.g. aggregates vs leaderboard columns on **`statcast_batting`**). Never patch “owned elsewhere” columns from the wrong script.
 - **Partial upserts are load-bearing:** They let **`fwpr`** and **`bwpr`** land in separate passes and let Statcast loaders patch deltas without wiping pybaseball-sourced counters.
 - **RPW parity:** **`calc_batting_war`**, **`calc_pitching_war`**, and **`calc_fielding_season_metrics`** intentionally share **`RPW = 9×(lgR/lgIP)×1.5+3`** semantics so batting/pitching/fielding WPR fractions stay comparable once totals exist.
-- **Fielding **`fwpr`** duality:** Where Statcast exists (**2016+**), **`fielding_runs_prevented`** is preferred; RF/9 z-scores stabilize earlier seasons and fringe cases without Statcast bundles.
+- **Fielding fWPR (`fwpr`) duality:** Where Statcast exists (**2016+**), prefer **`statcast_fielding_oaa.fielding_runs_prevented`**; RF/9 z-scores stabilize earlier seasons and fringe cases without Statcast bundles.
 - **Next.js divergence:** **`AGENTS.md`** — read in-repo **`node_modules/next/dist/docs/`**; don’t assume pre-App-Router ergonomics.
 
 ---
