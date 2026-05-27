@@ -302,6 +302,44 @@ def ensure_player_positions(client: Any, cache: dict[int, str | None], ids: set[
             cache[pid] = row_by_id.get(pid)
 
 
+def load_fielding_splits(client: Any, season: int) -> dict[int, list[dict]]:
+    """
+    Returns {player_id: [{"position": str, "inn": float}, ...]} for the given season.
+    Fetches all rows from player_fielding_seasons where season matches.
+    Uses pagination to handle large result sets (page size 1000).
+    """
+    splits: dict[int, list[dict]] = {}
+    offset = 0
+    page_size = 1000
+    while True:
+        resp = (
+            client.table("player_fielding_seasons")
+            .select("player_id,position,inn")
+            .eq("season", season)
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
+        rows = resp.data or []
+        for row in rows:
+            pid = row.get("player_id")
+            if pid is None:
+                continue
+            try:
+                pid_i = int(pid)
+            except (TypeError, ValueError):
+                continue
+            splits.setdefault(pid_i, []).append(
+                {
+                    "position": row.get("position") or "",
+                    "inn": float(row.get("inn") or 0),
+                }
+            )
+        if len(rows) < page_size:
+            break
+        offset += page_size
+    return splits
+
+
 def derive_row_payload(
     row: dict[str, Any],
     season: int,
@@ -309,6 +347,7 @@ def derive_row_payload(
     lg_bat: dict[str, Any],
     lg_ip_league: float | None,
     position_cache: dict[int, str | None],
+    season_fielding_splits: dict[int, list[dict]],
     mlb_games_played: float,
 ) -> dict[str, Any] | None:
     pid = row.get("player_id")
@@ -381,12 +420,13 @@ def derive_row_payload(
     g = _to_float(row.get("g"))
     lg_r_ln = _to_float(lg_bat.get("lg_r"))
     lg_pa_ln = _to_float(lg_bat.get("lg_pa"))
-    pos_str = position_cache.get(player_id_int)
+    fielding_splits = season_fielding_splits.get(player_id_int, [])
+    fallback_position = position_cache.get(player_id_int) or ""
     bwpr_val = calc_batting_war(
         woba,
         pa,
         g,
-        pos_str,
+        fielding_splits,
         int(season),
         lg_woba_ln,
         lg_r_ln,
@@ -394,6 +434,7 @@ def derive_row_payload(
         lg_ip_league,
         park_factor=pf_team,
         mlb_games=mlb_games_played,
+        fallback_position=fallback_position,
     )
 
     out: dict[str, Any] = {
@@ -484,6 +525,7 @@ def run_season(client: Any, season: int) -> tuple[int, int, int, int, int, float
 
     park_map = load_park_map_for_season(client, season)
     position_cache: dict[int, str | None] = {}
+    season_fielding_splits = load_fielding_splits(client, season)
     mlb_games_played = get_mlb_games_played(client, season)
 
     rows_read = 0
@@ -532,6 +574,7 @@ def run_season(client: Any, season: int) -> tuple[int, int, int, int, int, float
                 lg_bat,
                 lg_ip_league,
                 position_cache,
+                season_fielding_splits,
                 mlb_games_played,
             )
             if payload is None:

@@ -288,12 +288,48 @@ _BATTING_POSITION_ADJ_PER_162: dict[str, float] = {
     "DH": -17.5,
 }
 
+_MIN_INN_FOR_POSITION = 20.0
+
+
+def _weighted_position_adj_per_162(
+    fielding_splits: list[dict],
+    fallback_position: str,
+) -> float:
+    """
+    Compute an innings-weighted positional adjustment (runs per 162 games).
+
+    fielding_splits: list of dicts with keys 'position' (str) and 'inn' (float).
+    Positions with inn < _MIN_INN_FOR_POSITION are excluded.
+    If no qualifying innings exist, fall back to fallback_position lookup.
+    """
+    qualified = [
+        s
+        for s in fielding_splits
+        if isinstance(s.get("inn"), (int, float))
+        and s["inn"] >= _MIN_INN_FOR_POSITION
+        and isinstance(s.get("position"), str)
+    ]
+    if not qualified:
+        pos_key = fallback_position.strip().upper() if isinstance(fallback_position, str) else ""
+        return _BATTING_POSITION_ADJ_PER_162.get(pos_key, 0.0)
+
+    total_inn = sum(s["inn"] for s in qualified)
+    if total_inn <= 0:
+        pos_key = fallback_position.strip().upper() if isinstance(fallback_position, str) else ""
+        return _BATTING_POSITION_ADJ_PER_162.get(pos_key, 0.0)
+
+    weighted = sum(
+        _BATTING_POSITION_ADJ_PER_162.get(s["position"].strip().upper(), 0.0) * s["inn"]
+        for s in qualified
+    )
+    return weighted / total_inn
+
 
 def calc_batting_war(
     woba: float | None,
     pa: float | None,
     g: float | None,
-    position: str | None,
+    fielding_splits: list[dict],
     season: int,
     lg_woba: float | None,
     lg_r: float | None,
@@ -301,6 +337,7 @@ def calc_batting_war(
     lg_ip: float | None,
     park_factor: float = 1.0,
     mlb_games: float = 2430,
+    fallback_position: str = "",
 ) -> float | None:
     """
     Position-player **offensive** batting WAR (hybrid components; FanGraphs-style RPW/replacement).
@@ -353,8 +390,7 @@ def calc_batting_war(
     scale = get_woba_scale(season)
     batting_runs = (w - lgw) / scale * p / pf
 
-    pos_key = position.strip().upper() if isinstance(position, str) else ""
-    adj_162 = _BATTING_POSITION_ADJ_PER_162.get(pos_key, 0.0)
+    adj_162 = _weighted_position_adj_per_162(fielding_splits, fallback_position)
     positional_runs = adj_162 * (games / 162.0)
 
     rpw = 9.0 * (lr / lip) * 1.5 + 3.0
