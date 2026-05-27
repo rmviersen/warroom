@@ -1,309 +1,335 @@
-# WARroom — Developer handoff documentation
+# WARroom — Developer handoff
 
-This document orients a new maintainer to the **WARroom** codebase: a Next.js frontend backed by **Supabase** (Postgres + realtime), with a **Python/pandas/pybaseball ETL** pipeline that ingests MLB Statcast pitch data and maintains derived leaderboards and player-season metrics.
+This document orients maintainers on **WARroom**: a Next.js app on **Supabase** (Postgres + RLS + RPCs), with a **Python** ETL that ingests Statcast pitch data and maintains derived warehouse metrics (`player_*_seasons`, leaderboards, WPR-family stats).
 
-Canonical schema notes, RLS, RPC contracts, and migration hints live in **`SCHEMA.md`** (read alongside this file).
+Canonical DDL, RPC contracts, and partial-upsert semantics: **`SCHEMA.md`**. Repo agent rules: **`AGENTS.md`**.
+
+**Database snapshot:** row counts below were queried live against the project Supabase (PostgREST) on **2026-05-25**. Re-run counts before publishing; `statcast_pitches` is large — use `select("id", count="exact", head=True)` (a bare `*` head count can 500).
 
 ---
 
-## 1. What the platform does
+## 1. Full stack overview
 
 | Layer | Role |
 |-------|------|
-| **Web app** (`src/`) | Browse players, teams, standings, Statcast explorer with live pitch updates, batting leaderboards |
-| **API routes** (`src/app/api/`) | Server-side aggregation: MLB Stats API + Supabase reads |
-| **Supabase** | Primary data store: Statcast pitches, Statcast batting/pitching aggregates, historical player/team seasons, game logs, park factors, league averages |
-| **Pipeline** (`pipeline/`) | Scheduled and manual jobs: Statcast ETL, aggregates, leaderboards seeding, derived metrics (wOBA, OPS+, WPR, CQI, Stuff+, etc.) |
+| **Web** (`src/`) | App Router UI: players, teams, Statcast explorer, leaderboards |
+| **API** (`src/app/api/`) | Route handlers: Supabase reads + MLB Stats API |
+| **Supabase** | Postgres: pitches, Statcast leaderboards, season warehouses, game logs, park factors, league tables |
+| **Pipeline** (`pipeline/`) | Python 3: pybaseball/pandas, service-role Supabase client, optional **APScheduler** poller |
 
-**Identifiers:** Player / team ids follow **MLBAM** (Major League Baseball Advanced Media) integers. Many tables use **soft references** (no FK to `players.id`) so Statcast rows can exist before roster rows.
+| Area | Stack (current `package.json`) |
+|------|--------------------------------|
+| Frontend | **Next.js 16** (App Router), **React 19**, TypeScript — same product shape older docs summarized as “Next + Supabase + Python + Tailwind” |
+| Styling | **Tailwind CSS 4** (`@tailwindcss/postcss`), `globals.css` |
+| Charts | Recharts (where used) |
+| DB client (browser) | `@supabase/supabase-js` (+ `@supabase/ssr` as needed) |
+| Pipeline | `supabase-py`, `pandas`, `pybaseball`, `APScheduler` |
 
 ---
 
-## 2. Repository layout
+## 2. Database snapshot — row counts & season coverage
+
+**No season axis:** `players`, `teams` — current warehouse roster / franchise table snapshots (not year-scoped).
+
+| Table | Rows | Season / date coverage |
+|-------|------|-------------------------|
+| `players` | 8,873 | — |
+| `teams` | 30 | — |
+| `game_logs` | 84,056 | **1990-04-09 → 2026-05-24** (`game_date`; calendar years **1990–2026** in DB) |
+| `park_factors` | 1,088 | **1990–2026** |
+| `statcast_pitches` | **7,692,407** | **2015-04-05 → 2026-05-24** (`game_date`) |
+| `statcast_batting` | 10,825 | **2015–2026** |
+| `statcast_pitching` | 9,942 | **2015–2026** |
+| `statcast_pitching_arsenal` | 42,026 | **2015–2026** |
+| `league_pitch_type_averages` | 333 | **2015–2026** |
+| `league_batting_averages` | 37 | **1990–2026** |
+| `league_pitching_averages` | 37 | **1990–2026** |
+| `player_batting_seasons` | 38,452 | **1990–2026** |
+| `player_pitching_seasons` | 24,345 | **1990–2026** |
+| `player_fielding_seasons` | 80,019 | **1990–2026** |
+| `statcast_fielding_oaa` | 5,914 | **2016–2026** |
+| `statcast_catcher_defense` | 852 | **2016–2026** |
+| `player_position_seasons` | 582 | **2024 only** (partial seed — expand when multi-year splits matter) |
+
+**Views:** `statcast_pitch_season_averages` aggregates pitch-level columns by calendar year extracted from `statcast_pitches.game_date` (see **`SCHEMA.md`**).
+
+---
+
+## 3. WARroom proprietary metrics (formulas)
+
+**Naming:** Warehouse columns **`bwpr`**, **`pwpr`**, **`fwpr`**, placeholder **`brwpr`**, and total **`wpr`** (see migrations `20260522150000_*`). Code and newer docs say **WPR**; FanGraphs/BR-style guts inside the formulas below.
+
+### 3.1 CQI — Contact Quality Index (`calc_cqi` in `pipeline/calculations/batting_calcs.py`)
+
+- **Defined only when** `season >= STATCAST_MIN_SEASON` (**2015**, `pipeline/calculations/constants.py`) and league baselines exist in `get_league_averages(season)` (`lgAvgEV`, `lgBarrelRate`, `lgHardHitRate` — aligned with **`league_averages.json`** / Savant units).
+- **Formula:** \( \text{CQI} = 100 \times (0.35\,r_{EV} + 0.5\,r_{barrel} + 0.15\,r_{HH}) \) where each \(r\) is the player rate ÷ league rate.
+- **Calibration note:** League JSON / DB league rows must stay in sync with Savant exports; treat CQI as **under ongoing validation** (see §10).
+
+### 3.2 Stuff+ (`calc_stuff_plus` in `pipeline/calculations/pitching_calcs.py`)
+
+Per pitch type, **100 = league average** for that type (handedness-split league row from `league_pitch_type_averages`):
+
+- Ratios: `velo/lg_velo`, `spin/lg_spin`, horizontal movement `abs(pitcher)/abs(league)`, vertical movement `abs(pitcher)/abs(league)`.
+- **Weights:** velocity **40%**, spin **30%**, horizontal break **15%**, vertical break **15%**.
+- **Formula:** `100 × (0.4×r_v + 0.3×r_s + 0.15×r_h + 0.15×r_z)`.
+
+Season rollup (`stuff_plus` on `statcast_pitching` / arsenal rows) is produced in **`calc_pitching_season_metrics.py`** together with **`pwpr`**.
+
+### 3.3 bWPR — batting (`calc_batting_war` in `pipeline/calculations/batting_calcs.py`)
+
+Position-player **offensive** wins (hybrid; FanGraphs-style RPW/replacement):
+
+- **Batting runs (park-adjusted):** `(wOBA − lgwOBA) / wOBA_scale × PA / park_factor` with FanGraphs guts `wOBA_scale` (`get_woba_scale(season)`).
+- **Runs per win:** `RPW = 9 × (lgR / lgIP) × 1.5 + 3` using league pitching innings.
+- **Replacement runs:** `(570 × (mlb_games/2430)) × (RPW / lg_pa) × PA`. `mlb_games` from **`get_mlb_games_played`** (2020 → 900, pre-2022 → 2430, else **`game_logs`** tally) — same helper family as season metric scripts.
+- **Positional adjustment (Baseball-Reference-style runs per 162 games):** `adj_162 × (G/162)`.
+  - **`adj_162`** is **innings-weighted** across defensive splits from **`player_fielding_seasons`**: only positions with **`inn ≥ 20`** count; weights are innings shares × BR-style **`_BATTING_POSITION_ADJ_PER_162`** lookup.
+  - If **no** position clears the 20-inning bar, **`players.position`** supplies the fallback key (covers **DH** and pure bat-only rows without fielding splits in the warehouse).
+
+**Orchestration:** **`calc_batting_season_metrics.py`** loads fielding splits via `load_fielding_splits`, hydrates positions from **`players`**, writes **`bwpr`** (and rates) via `upsert_player_batting_seasons`.
+
+### 3.4 pWPR — pitching (`calc_pitching_war` in `pipeline/calculations/pitching_calcs.py`)
+
+Simplified FanGraphs-style pitching value on a **FIP** basis vs league (see docstring):
+
+- Runs above league average: `(lgFIP − FIP) / 9 × IP / park_factor`.
+- `RPW` as in batting (**9 × (lgR/lgIP) × 1.5 + 3**).
+- Replacement side uses constant **1000** (marginal pitchers): `(1000 × (mlb_games/2430)) × (RPW/lg_pa) × BF_proxy` with `BF_proxy = (lg_pa/lg_IP) × IP`.
+- **`WAR_pitch = (RAA_FIP + replacement_runs) / RPW`** (stored as **`pwpr`** rounded to 1 decimal).
+
+**Orchestration:** **`calc_pitching_season_metrics.py`** (uses **`league_pitching_averages`**, **`park_factors`**, FIP constants).
+
+### 3.5 fWPR — fielding (`pipeline/calc_fielding_season_metrics.py`)
+
+Writes **`fwpr`** onto **`player_batting_seasons`** (partial upsert) using the same **`RPW`** definition as **`calc_batting_war`** / **`calc_pitching_war`**.
+
+- **`season ≥ 2016`** and Statcast **`statcast_fielding_oaa`** has **any** row for that **`player_id`**: sum **`fielding_runs_prevented`** → **`fwpr = round(fruns / RPW, 1)`**.
+- **Otherwise:** **RF/9 z-score fallback** vs position-season leagues built from **`player_fielding_seasons`**: per appearance `z × (inn/9) × 0.1`, summed (see `fielding_runs_via_rf9_fallback`).
+
+Runs only when **`league_batting_averages`** and **`lg_ip`** resolve for that season.
+
+### 3.6 WPR component status
+
+| Component | Code / column | Status |
+|-----------|----------------|--------|
+| **bWPR** | `bwpr`, `calc_batting_season_metrics` | **Shipped** |
+| **fWPR** | `fwpr`, `calc_fielding_season_metrics` | **Shipped** |
+| **pWPR** | `pwpr`, `calc_pitching_season_metrics` | **Shipped** |
+| **brWPR** | `brwpr` | **Not built** (baserunning) |
+| **Total WPR** | `wpr` | **Not built** — needs **`brwpr`** + rollup rule |
+
+---
+
+## 4. Pipeline architecture
+
+### 4.1 Two structural refactors (how the warehouse stays safe)
+
+1. **Partial-upsert RPCs** — SECURITY DEFINER upserts (`upsert_statcast_*`, `upsert_player_*_seasons`) **merge** rows so **omitted JSON keys keep prior DB values** (`COALESCE(EXCLUDED.col, existing.col)` pattern). Scripts can PATCH **`fwpr`** or **`bwpr`** without sending full historical counting stat payloads. Migration family **`202605221*`** in `supabase/migrations/`.
+2. **Split offensive vs defensive batting value** — **`calc_batting_season_metrics.py`** owns **`bwpr`** (+ rate stats); **`calc_fielding_season_metrics.py`** owns **`fwpr`**. Both target the **same** `player_batting_seasons` conflict key `(player_id, season, team_id)` without clobbering each other’s columns.
+
+### 4.2 Script inventory (`pipeline/`)
+
+| Script | Role |
+|--------|------|
+| `config.py`, `db.py` | Env + Supabase service client |
+| `statcast_pipeline.py` | Normalize Savant CSV → batched **`statcast_pitches`** upsert |
+| `scheduler.py` | APScheduler cron (Eastern game window) calling `run_pipeline` |
+| `aggregate_statcast_batting.py` | Pitch table → **`upsert_statcast_batting_aggregates`** (BBE aggregates) |
+| `aggregate_statcast_pitching.py` | Pitch table → **`statcast_pitching`** + **`statcast_pitching_arsenal`** RPCs |
+| `seed_statcast_batting.py` | Savant leaderboard fields for **`statcast_batting`** (xSTATS, sprint, metadata) |
+| `calc_batting_metrics.py` | Row patches (e.g. **CQI** on batting lines tied to Statcast) |
+| `calc_pitching_metrics.py` | Row patches for **`statcast_pitching`** / partial-upsert arsenals |
+| `calc_league_averages.py` | Fills **`league_batting_averages`** / **`league_pitching_averages`** |
+| `calc_league_pitch_type_averages.py` | **`league_pitch_type_averages`** (Stuff+ denominators); **not** in GitHub Actions yet |
+| `calc_park_factors.py` | **`park_factors`** (run-environment); typically batch / on-demand |
+| `calc_batting_season_metrics.py` | **`player_batting_seasons`** derivatives + **`bwpr`** |
+| `calc_pitching_season_metrics.py` | **`player_pitching_seasons`** derivatives + **`pwpr`** + Stuff+ rollup |
+| `calc_fielding_season_metrics.py` | **`fwpr`** from OAA (**2016+**) or RF/9 fallback (see §3.5) |
+| `seed_statcast_oaa.py` | Loads **`statcast_fielding_oaa`** from Savant/defensive exports |
+| `seed_statcast_catcher_poptime.py` | Loads **`statcast_catcher_defense`** |
+| `seed_players.py`, `seed_teams.py`, `seed_missing_players.py`, `fix_missing_players.py` | Identity hygiene |
+| `seed_historical_players.py` | Bulk historical bios → **`players`** |
+| `seed_game_logs.py`, `enrich_game_logs.py` | **`game_logs`** box scores |
+| `seed_player_batting_seasons.py`, `seed_player_pitching_seasons.py`, `seed_player_fielding_seasons.py` | Warehouse counting lines |
+| `seed_player_position_seasons.py` | **`player_position_seasons`** (currently narrow year coverage — see §2) |
+| `seed_team_batting_seasons.py`, `seed_team_pitching_seasons.py`, `seed_team_fielding_seasons.py` | Team warehouse lines |
+| `backfill_statcast.py`, `backfill_statcast_historical.py`, `rerun_dates.py` | Date-range replay / bulk catch-up |
+| `explore_fielding_data.py`, `test_stat_splits.py` | Diagnostics / probes |
+
+### 4.3 `calculations/` modules
+
+| Module | Role |
+|--------|------|
+| `constants.py` | `STATCAST_MIN_SEASON`, wOBA weights, FIP constant loader, park cache |
+| `fetch_league_averages.py` | `league_averages.json` + DB league row helpers |
+| `batting_calcs.py` | wOBA/OPS+/wRC+, **CQI**, **`calc_batting_war`**, positional weighting |
+| `pitching_calcs.py` | FIP/ERA+/LOB%, **`calc_pitching_war`**, **`calc_stuff_plus`** |
+| `fielding_calcs.py` | Basic FIELD% / RF rate helpers |
+
+### 4.4 Recommended **daily refresh** order (deps)
+
+**GitHub Actions** (`.github/workflows/daily_refresh.yml`) covers a **subset**. For a full warehouse day aligned with shipped metrics:
+
+1. **`seed_game_logs.py`** (box score deltas)
+2. **Statcast ingest:** `statcast_pipeline.py` (continuous poller **or** `backfill_statcast.py` — GA uses **`backfill_statcast.py`**)
+3. **`aggregate_statcast_batting.py`** → **`aggregate_statcast_pitching.py`** (calendar season span)
+4. **`calc_batting_metrics.py`** → **`calc_pitching_metrics.py`**
+5. **`seed_player_batting_seasons.py`** → **`seed_player_pitching_seasons.py`** • **`seed_player_fielding_seasons.py`** as needed when box scores / pybaseball lines change (fielding **`fwpr`** depends on this)
+6. **`calc_league_averages.py`** when league numerators refresh (GA: Mondays — see §6)
+7. **`calc_pitching_season_metrics.py`** (**`pwpr`**, Stuff+)
+8. **`calc_batting_season_metrics.py`** (**`bwpr`**)
+9. **`seed_statcast_oaa.py`** → **`calc_fielding_season_metrics.py`** (**`fwpr`**); **`seed_statcast_catcher_poptime.py`** when refreshing catcher leaderboard inputs
+10. **`calc_league_pitch_type_averages.py`** periodically (Stuff+ denominators — often weekly with aggregates)
+11. **`calc_park_factors.py`** on schedule cadence tied to standings/park workload
+
+Individual CLIs expose `--season`, `--start-season`, `--end-season`, etc.; read each `main()`.
+
+---
+
+## 5. Frontend state
+
+### 5.1 Theme
+
+| Token / area | Value |
+|--------------|-------|
+| Navbar background | **`#1e3a6b`** |
+| Accent / underline / “WAR” wordmark gold | **`#c9a84c`** |
+| Inactive nav text | **`#a8bdd8`** |
+| `globals.css` body | **`#ffffff`** background, **`#0f2044`** text |
+
+### 5.2 Pages (`src/app/**/page.tsx`)
+
+| Route | Notes |
+|-------|-------|
+| `/` | Home |
+| `/players`, `/players/[id]` | List + profile (season tables, Statcast percentile sections, recent pitches API) |
+| `/teams`, `/teams/[id]` | Franchise browsing |
+| `/statcast` | Explorer — realtime **`statcast_pitches`** subscription |
+| `/leaderboards/batting`, `/leaderboards/pitching` | Leaderboard consumers |
+
+### 5.3 Navbar
+
+**`src/components/layout/Navbar.tsx`** — links: **Teams**, **Players**, **Leaderboards** (hover submenu: Batting, Pitching), **Statcast**. Brand styling: navy bar, gold **`WAR`**, white **`room`**.
+
+### 5.4 API routes (representative)
+
+`src/app/api/players/**/*.ts`, `statcast/**/*.ts`, `teams/**/*.ts`, **`leaderboards/batting`**, **`leaderboards/pitching`**, `standings`, `schedule`.
+
+Types: **`src/types/index.ts`**.
+
+---
+
+## 6. GitHub Actions — Daily Data Refresh
+
+**Workflow:** `.github/workflows/daily_refresh.yml`
+
+| Setting | Value |
+|---------|-------|
+| **Schedule** | `cron: "0 8 * * *"` (**08:00 UTC daily**) |
+| **`workflow_dispatch`** | Optional **`season`** input (default **`2026`**) |
+| **`SEASON`** env | Dispatched input or **`2026`** |
+
+**Step order:**
+
+1. Install Python deps (`pipeline/requirements.txt`)
+2. Write `pipeline/.env` from **`SUPABASE_URL`** / **`SUPABASE_SERVICE_ROLE_KEY`** secrets
+3. **`seed_game_logs.py`**
+4. **`backfill_statcast.py`** (skippable via `skip_statcast`; `continue-on-error: true`)
+5. **`aggregate_statcast_batting.py`** (`$SEASON` only)
+6. **`aggregate_statcast_pitching.py`** (`$SEASON` only)
+7. **`calc_batting_metrics.py`**, **`calc_pitching_metrics.py`**
+8. **`seed_player_batting_seasons.py`**, **`seed_player_pitching_seasons.py`** (continue-on-error)
+9. **`calc_batting_season_metrics.py`**, **`calc_pitching_season_metrics.py`**
+
+**Weekly league averages:** **`calc_league_averages.py`** runs only when **`date -u +%u` equals `1`** (Monday, UTC **or** on manual `workflow_dispatch`). That keeps **`league_batting_averages`** / **`league_pitching_averages`** refreshed without daily full recomputation load.
+
+**Gaps vs §4.4:** No GA steps yet for **`seed_statcast_oaa`**, catcher seed, **`calc_fielding_season_metrics`**, **`calc_league_pitch_type_averages`**, or **`calc_park_factors`** — run those manually or extend the workflow when ready.
+
+---
+
+## 7. Known issues & deferred work
+
+| Item | Notes |
+|------|--------|
+| **CQI calibration** | Depends on **`league_averages.json`** / DB league Statcast denominators staying aligned with Savant; validate against known leaders |
+| **brWPR not built** | Column exists as placeholder; needs baserunning model + warehouse inputs |
+| **Total WPR (`wpr`) not built** | Waiting on **`brwpr`** + aggregation rule tying **`bwpr`**, **`pwpr`**, **`fwpr`**, **`brwpr`** |
+| **Vercel** | Production deploy / env wiring **not finalized** |
+| **Statcast explorer** | Client column naming vs SCHEMA drift — reconcile before exposing new Savant fields |
+| **Player profile** | Enhancements backlog (presentation, comps, pitching/batting two-way UX) |
+| **Two-way players** | Dedicated handling still thin — beware single `players.position` vs multi-role Statcast splits |
+| **Social posting pipeline** | Not implemented |
+
+---
+
+## 8. Immediate next steps (priority order)
+
+1. **brWPR exploration** — identify baserunning inputs (Statcast runners / retrosheet-class events), prototype runs component, warehouse column strategy
+2. **Total WPR (`wpr`) calculation** — spec once **`brwpr`** exists (`wpr = f(bwpr, fwpr?, pwpr?, brwpr?)` accounting for pitchers who hit separate rows)
+3. **Vercel deployment** — `NEXT_PUBLIC_*`, build verification, ISR/SSR choices for leaderboard pages
+4. **Player profile UI** — richer WPR breakout, percentile copy, pitcher/batter mode polish
+
+---
+
+## 9. Key architecture decisions & learnings
+
+- **Identifiers:** MLBAM integers everywhere; **soft references** dominate (no FK to `players` on pitch rows) so ETL ordering stays forgiving.
+- **Single writer discipline:** Respect **`SCHEMA.md`** splits (e.g. aggregates vs leaderboard columns on **`statcast_batting`**). Never patch “owned elsewhere” columns from the wrong script.
+- **Partial upserts are load-bearing:** They let **`fwpr`** and **`bwpr`** land in separate passes and let Statcast loaders patch deltas without wiping pybaseball-sourced counters.
+- **RPW parity:** **`calc_batting_war`**, **`calc_pitching_war`**, and **`calc_fielding_season_metrics`** intentionally share **`RPW = 9×(lgR/lgIP)×1.5+3`** semantics so batting/pitching/fielding WPR fractions stay comparable once totals exist.
+- **Fielding **`fwpr`** duality:** Where Statcast exists (**2016+**), **`fielding_runs_prevented`** is preferred; RF/9 z-scores stabilize earlier seasons and fringe cases without Statcast bundles.
+- **Next.js divergence:** **`AGENTS.md`** — read in-repo **`node_modules/next/dist/docs/`**; don’t assume pre-App-Router ergonomics.
+
+---
+
+## 10. Validation targets
+
+Use these MLBAM IDs when sanity-checking published metrics:
+
+| Player | MLBAM ID | Use for |
+|--------|----------|---------|
+| **Aaron Judge** | **`592450`** | **bWPR**, **fWPR**, **CQI** |
+| **Paul Skenes** | **`694973`** | **pWPR**, **Stuff+** |
+
+---
+
+## 11. Repository map (abbrev.)
 
 ```
 warroom/
-├── HANDOFF.md              ← this file
-├── SCHEMA.md               ← database tables, indexes, RLS, RPC behavior, realtime
-├── README.md               ← default create-next-app readme (not operational)
-├── package.json            ← Next.js 16, React 19, Supabase JS, Tailwind 4
-├── tsconfig.json
-├── .env.local              ← local Next env (not committed; see §5)
-│
-├── src/
-│   ├── app/                ← App Router pages + API routes
-│   ├── components/         ← UI (layout, Statcast sections, charts)
-│   ├── lib/                ← supabase client, MLB fetch, formulas, realtime hook
-│   └── types/index.ts      ← shared TS types for API responses / tables
-│
-├── supabase/migrations/    ← ordered SQL migrations (source of truth for DB evolution)
-│
-└── pipeline/               ← Python ETL + calculations
-    ├── .env                ← service role + Supabase URL (not committed)
-    ├── config.py           ← loads pipeline/.env
-    ├── db.py               ← Supabase client (service role)
-    ├── requirements.txt
-    ├── calculations/       ← batting / pitching / fielding / league JSON
-    └── *.py                ← seeders, aggregators, metric runners, scheduler
+├── HANDOFF.md
+├── SCHEMA.md
+├── AGENTS.md
+├── package.json
+├── src/app/          # Routes + api/
+├── src/components/
+├── src/lib/
+├── supabase/migrations/
+└── pipeline/
+    ├── calculations/
+    └── *.py          # Scripts in §4.2
 ```
 
 ---
 
-## 3. Technology stack
-
-| Area | Stack |
-|------|--------|
-| Frontend | Next.js **16** (App Router), React **19**, TypeScript |
-| Styling | Tailwind CSS **4** (`@tailwindcss/postcss`), `globals.css` |
-| Charts | Recharts (where used) |
-| Browser DB | `@supabase/supabase-js` with **anon key** (+ optional Realtime) |
-| Server API | Route handlers call Supabase anon client + `NEXT_PUBLIC_MLB_API_BASE` |
-| Database | Supabase Postgres, Row Level Security (public read on most stats tables) |
-| Pipeline | Python 3; **pybaseball** (Savant); **pandas**; **supabase-py**; **APScheduler** (blocking cron) |
-
-**Agent hints:** Root `AGENTS.md` points at Next.js in-repo docs under `node_modules/next/dist/docs/` — this repo may use conventions newer than generic training cutoff.
-
----
-
-## 4. Environment variables
-
-### 4.1 Next.js (`warroom/.env.local`)
-
-Required for builds / local dev:
-
-| Variable | Purpose |
-|----------|---------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public anon key (RLS applies) |
-| `NEXT_PUBLIC_MLB_API_BASE` | MLB Stats API base URL (e.g. `https://statsapi.mlb.com/api/v1`) |
-
-### 4.2 Pipeline (`warroom/pipeline/.env`)
-
-| Variable | Purpose |
-|----------|---------|
-| `SUPABASE_URL` | Same project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | **Server-only** — bypasses RLS for ETL writes |
-
-**Never** expose the service role key to the browser or commit it.
-
----
-
-## 5. External connections
-
-| System | Usage | Typical entry point |
-|--------|--------|---------------------|
-| **Supabase Postgres** | All persisted stats | `src/lib/supabase.ts` (anon), `pipeline/db.py` (service) |
-| **Supabase Realtime** | Live `statcast_pitches` inserts on explorer | `src/lib/supabase-realtime.ts`, publication setup in `SCHEMA.md` |
-| **MLB Stats API** | Live season lines, teams, standings, schedules | `src/lib/mlb-api.ts` (`mlbFetch`) |
-| **Baseball Savant** (via **pybaseball**) | Pitch-by-pitch Statcast CSV for date ranges | `pipeline/statcast_pipeline.py` |
-
----
-
-## 6. Database & migrations
-
-- **Living documentation:** **`SCHEMA.md`** — tables, views, uniqueness for upserts, which columns are “owned” by which loader, RPC signatures, partial upsert semantics, realtime publication notes.
-- **Executable history:** **`supabase/migrations/*.sql`** — apply in timestamp order when provisioning a fresh project.
-
-Notable migration themes:
-
-- Statcast pitches natural key `(game_pk, at_bat_number, pitch_number)`; batter/pitcher columns renamed to `batter_id`, `pitcher_id` (`20260519100000_*`).
-- Statcast pitching + arsenal + league pitch-type averages (hand-split `p_throws`) (`202605191*`).
-- Partial upserts for Statcast batting/pitching RPCs (`2026052210*`) — omitted JSON keys preserve existing DB values on conflict.
-- Partial upserts for `player_*_seasons` (`20260522130000_*`).
-- `player_batting_seasons.war` → **`bwpr`**, **`fwpr`**, **`brwpr`**, **`wpr`**; pitching `war` → **`pwpr`** (`20260522150000_*`).
-- League warehouse tables **`league_batting_averages`**, **`league_pitching_averages`** (`20260522140000_*`).
-- Statcast percentile RPCs: **`get_batter_statcast_percentiles`**, **`get_pitcher_statcast_percentiles`** (`20260522160000_*`, `20260522170000_*`) — consumed by `GET /api/players/[id]`.
-
-Grant **execute** on new RPCs to `anon` / `authenticated` as needed if PostgREST returns permission errors.
-
----
-
-## 7. Python pipeline (`pipeline/`)
-
-All scripts assume `pipeline/.env` is loadable (`import config` triggers `python-dotenv`).
-
-### 7.1 Core infrastructure
-
-| File | Purpose |
-|------|---------|
-| `config.py` | `SUPABASE_*`, Eastern game-hour window, poll interval |
-| `db.py` | Singleton `create_client(url, SERVICE_ROLE_KEY)` |
-| `statcast_pipeline.py` | Daily Statcast fetch → normalized rows → batched upsert into `statcast_pitches` |
-| `scheduler.py` | APScheduler cron: Eastern hours, every `POLL_INTERVAL_MINUTES`, calls `run_pipeline` |
-
-### 7.2 Statcast aggregation & leaderboards
-
-| File | Purpose |
-|------|---------|
-| `aggregate_statcast_batting.py` | From `statcast_pitches`: BBE aggregates → `upsert_statcast_batting_aggregates` (Savant barrel math documented in-file) |
-| `aggregate_statcast_pitching.py` | Pitcher-season and arsenal rollup → pitching RPCs |
-| `seed_statcast_batting.py` | pybaseball **leaderboard** fields for `statcast_batting` (xSTATS, sprint, names, team) — distinct from aggregates ownership in `SCHEMA.md` |
-
-### 7.3 Historical / reference seeding
-
-| File | Purpose |
-|------|---------|
-| `seed_players.py`, `seed_teams.py`, `seed_missing_players.py`, `fix_missing_players.py` | Roster / id hygiene |
-| `seed_historical_players.py` | Bulk historical player bios |
-| `seed_game_logs.py`, `enrich_game_logs.py` | Box scores / game tally (feeds **`game_logs`** for replacement-level game counts / PA floors) |
-| `seed_*_seasons.py` (player batting/pitching/fielding/position; team batting/pitching/fielding) | Warehouse season totals from pybaseball or similar |
-
-### 7.4 Derived metrics (warehouse)
-
-| File | Purpose |
-|------|---------|
-| `calc_league_averages.py` | Fills **`league_batting_averages`** / **`league_pitching_averages`** from aggregated season tables |
-| `calc_league_pitch_type_averages.py` | **`league_pitch_type_averages`** — handedness-split baselines for movement / Stuff+ |
-| `calc_batting_metrics.py`, `calc_pitching_metrics.py` | Row-level patches (e.g. CQI on batting lines tied to Statcast) |
-| `calc_batting_season_metrics.py` | Reads `player_batting_seasons` counts → rates, OPS+, wRC+, **bwpr** via `calc_batting_war`, partial upsert |
-| `calc_pitching_season_metrics.py` | Pitching rates, ERA+, **pwpr**, Stuff+ season rollup; uses league tables + **`park_factors`** |
-| `calc_park_factors.py` | Computes / loads park run environment into **`park_factors`** |
-
-### 7.5 Utilities / one-offs
-
-| File | Purpose |
-|------|---------|
-| `backfill_statcast.py`, `backfill_statcast_historical.py`, `rerun_dates.py` | Date-range replays |
-| `test_stat_splits.py` | Split testing helper |
-
----
-
-## 8. Calculations
-
-### 8.1 Python (`pipeline/calculations/`)
-
-| Module | Highlights |
-|--------|------------|
-| **`constants.py`** | Season thresholds (e.g. Statcast min year), FanGraphs-style **wOBA weights** (`get_woba_weights`), **FIP constant** (`get_fip_constant`) |
-| **`fetch_league_averages.py`** | Loads **`league_averages.json`** (checked-in bundle) plus integration with **`calc_league_averages`**-filled DB tables |
-| **`batting_calcs.py`** | ISO, BABIP, wOBA, OPS+, wRC+, **CQI** (Statcast vs league baseline), **`calc_batting_war`** (positional WPR; uses **`get_mlb_games_played`** rules: 2020→900, pre-2022→2430, else count from **`game_logs`**) |
-| **`pitching_calcs.py`** | K/9, BB/9, HR/9, WHIP, FIP, ERA+ (`100 × lgERA / ERA / park_factor`), **`calc_pitching_war`**, LOB%, **`calc_stuff_plus`** (arsenal vs `league_pitch_type_averages`) |
-| **`fielding_calcs.py`** | FIELD%, RF/9, RF/G — basic derived fielding |
-
-**WPR naming:** DB columns **`bwpr`**, **`pwpr`**, and rollups **`fwpr`**, **`brwpr`**, **`wpr`** (see migration `20260522150000_*`). Older docs may still say “WAR”; code comments in season-metric scripts use WPR terminology.
-
-### 8.2 TypeScript (`src/lib/formulas/`)
-
-Duplicate or UI-adjacent formula helpers for batting / pitching / fielding (used where the frontend computes display-only values). Prefer **pipeline + DB** as source of truth for published metrics.
-
----
-
-## 9. Next.js application
-
-### 9.1 Pages (`src/app/`)
-
-| Route | Description |
-|-------|-------------|
-| `/` | Home |
-| `/players` | Player list |
-| `/players/[id]` | Profile: MLB season stats table, **`BatterStatcastSection`** or **`PitcherStatcastSection`** (percentiles from RPCs), recent pitches |
-| `/teams`, `/teams/[id]` | Team browsing + Statcast-backed team API consumers |
-| `/statcast` | Explorer: realtime pitch feed (`useStatcastRealtime`) |
-| `/leaderboards/batting` | Statcast batting leaderboard API consumer |
-
-Layouts: `layout.tsx`, `Navbar`, `Footer`.
-
-### 9.2 API routes (`src/app/api/`)
-
-| Route | Role |
-|-------|------|
-| `players/route.ts` | List/search players |
-| `players/[id]/route.ts` | MLB person hydrate + Supabase (`statcast_batting`, `players`, historical seasons), RPCs **`get_batter_statcast_percentiles`**, **`get_pitcher_statcast_percentiles`** |
-| `players/[id]/pitches/route.ts` | Recent pitch rows for profile |
-| `statcast/pitches/route.ts` | Pitch queries for explorer |
-| `statcast/leaderboard/route.ts` | Leaderboard payloads |
-| `leaderboards/batting/route.ts` | Batting board |
-| `teams/*`, `standings/route.ts`, `schedule/route.ts` | MLB-facing aggregates |
-
-Types for JSON bodies live in **`src/types/index.ts`**.
-
-### 9.3 Key UI components (`src/components/ui/`)
-
-| Component | Role |
-|-----------|------|
-| `BatterStatcastSection.tsx` | Renders **`batterPercentiles`** JSON from API |
-| `PitcherStatcastSection.tsx` | Renders **`pitcherPercentiles`** (overall + arsenal) |
-| `PercentileBar.tsx` | Shared percentile visuals |
-
----
-
-## 10. Data ownership (quick reference)
-
-Avoid double-writing incompatible columns:
-
-- **`aggregate_statcast_batting`** (RPC `upsert_statcast_batting_aggregates`): PA, EV, barrels, hard-hit, launch angle aggregates — **not** xSTATS/sprint/name/team.
-- **`seed_statcast_batting`**: leaderboard-owned columns including xBA/xSLG/xwOBA, sprint, display metadata.
-- **`calc_batting_metrics`**: can own **CQI** on appropriate rows when Statcast is present.
-
-See **`SCHEMA.md`** for the authoritative split per table/RPC.
-
----
-
-## 11. Local development
-
-### 11.1 Web
+## 12. Local dev cheatsheet
 
 ```bash
-cd warroom
-npm install
-# create .env.local with NEXT_PUBLIC_* vars
-npm run dev
-```
+# Web
+cd warroom && npm install && npm run dev   # requires .env.local NEXT_PUBLIC_* 
 
-### 11.2 Pipeline
-
-```bash
+# Pipeline
 cd warroom/pipeline
-python -m venv .venv
-.venv\Scripts\activate   # Windows
+python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
-# create .env with SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
+# pipeline/.env: SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
 
-python statcast_pipeline.py    # typical one-shot (see module for CLI)
-python scheduler.py           # long-running poller + immediate first run
+python scheduler.py                         # Eastern-hour Statcast polling
+python calc_fielding_season_metrics.py --start-season 2024 --end-season 2026
 ```
 
-Individual scripts expose `argparse` CLIs (`--season`, `--start-date`, etc.); inspect `if __name__ == "__main__"` blocks.
-
-### 11.3 Quality gates
-
-```bash
-cd warroom
-npm run lint
-npx tsc --noEmit
-```
+Quality gates: `npm run lint`, `npx tsc --noEmit`.
 
 ---
 
-## 12. Operations checklist for a new environment
-
-1. Create Supabase project; run **`supabase/migrations`** in order.
-2. Configure Realtime publication for Statcast tables if live explorer is needed (`SCHEMA.md` snippet).
-3. Add RLS policies if new tables lack them (mirror existing patterns — public SELECT for stats tables).
-4. Set Next.js **`NEXT_PUBLIC_*`** and pipeline **service role** secrets.
-5. Seed reference data: teams, players, game logs (for denominator logic), league averages tables.
-6. Run Statcast ETL + aggregates + seasonal metric calculators in dependency order for the seasons you care about.
-7. Verify PostgREST: RPC **`get_*_statcast_percentiles`** executable by anon/authenticated roles.
-
----
-
-## 13. Glossary
-
-| Term | Meaning |
-|------|---------|
-| **WPR** | Wins above Replacement (positional branding in DB; batting `bwpr`, pitching `pwpr`, total placeholder `wpr`) |
-| **CQI** | Contact Quality Index (100 = league average) — batting/Statcast context |
-| **Stuff+** | Pitch movement/velo/spin composite vs handedness-split league averages |
-| **Soft reference** | Logical MLBAM id link without enforcing FK to `players` |
-
----
-
-## 14. What this handoff intentionally does **not** duplicate
-
-- **Full DDL:** see **`SCHEMA.md`** (and migrations for exact incremental changes).
-- **Line-by-line every source file:** use this document as the map; open files by concern area (§2, §7, §9).
-- **Committed secrets:** `.env.local` / `pipeline/.env` are absent from git — recreate from §4.
-
----
-
-*Last oriented to repo layout as of handoff authoring. Update this file when you add major subsystems or change env/contract surfaces.*
+*Update this document when workflows, rollup formulas, or table ownership change materially.*
