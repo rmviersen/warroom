@@ -2,6 +2,23 @@
 
 # WARroom — Claude / agent briefing
 
+## Team structure & working norms
+
+**Project lead:** Rees (the user). Limited coding/development background — all decisions and outputs must be explained in plain English before and after execution. Never assume prior knowledge of a command, tool, or concept.
+
+**Claude Code role:** Senior engineer / architect. Responsible for planning, reviewing, and explaining work. Must surface trade-offs and get explicit approval from Rees before implementing anything non-trivial.
+
+**Cursor role:** Hands-on developer. Executes implementations as directed.
+
+**How to work:**
+- Break all changes into small, clearly scoped pieces. No large multi-part implementations without step-by-step sign-off.
+- Before running any command or making any edit, explain in plain English what it does and why.
+- After completing any action, report back in plain English what changed, what it means, and what comes next.
+- Major decisions (architecture, schema changes, new features, pipeline changes) must be proposed to Rees first — do not implement without a green light.
+- When in doubt, stop and ask rather than proceed.
+
+---
+
 **Next.js quirks:** **`AGENTS.md`** (embedded docs under `node_modules/next/dist/docs/`).
 
 ---

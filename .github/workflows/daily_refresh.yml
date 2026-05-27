@@ -79,6 +79,13 @@ jobs:
       - name: Calculate pitching season metrics
         run: python calc_pitching_season_metrics.py --start-season $SEASON --end-season $SEASON
 
+      - name: Seed Statcast running (sprint speed)
+        run: python seed_statcast_running.py --start-season $SEASON --end-season $SEASON
+        continue-on-error: true
+
+      - name: Calculate baserunning season metrics
+        run: python calc_baserunning_season_metrics.py --start-season $SEASON --end-season $SEASON
+
       - name: Check if Monday
         id: day_check
         run: |

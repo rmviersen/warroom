@@ -115,8 +115,8 @@ Runs only when **`league_batting_averages`** and **`lg_ip`** resolve for that se
 | **bWPR** | `bwpr`, `calc_batting_season_metrics` | **Shipped** |
 | **fWPR** | `fwpr`, `calc_fielding_season_metrics` | **Shipped** |
 | **pWPR** | `pwpr`, `calc_pitching_season_metrics` | **Shipped** |
-| **brWPR** | `brwpr` | **Not built** (baserunning) |
-| **Total WPR** | `wpr` | **Not built** — needs **`brwpr`** + rollup rule |
+| **brWPR** | `brwpr`, `calc_baserunning_season_metrics` | **Shipped** |
+| **Total WPR** | `wpr` | **Not built** — needs rollup rule once brWPR populates |
 
 ---
 
@@ -243,7 +243,7 @@ Types: **`src/types/index.ts`**.
 
 **Weekly league averages:** **`calc_league_averages.py`** runs only when **`date -u +%u` equals `1`** (Monday, UTC **or** on manual `workflow_dispatch`). That keeps **`league_batting_averages`** / **`league_pitching_averages`** refreshed without daily full recomputation load.
 
-**Gaps vs §4.4:** No GA steps yet for **`seed_statcast_oaa`**, catcher seed, **`calc_fielding_season_metrics`**, **`calc_league_pitch_type_averages`**, or **`calc_park_factors`** — run those manually or extend the workflow when ready.
+**Gaps vs §4.4:** No GA steps yet for **`seed_statcast_oaa`**, catcher seed, **`calc_fielding_season_metrics`**, **`calc_league_pitch_type_averages`**, or **`calc_park_factors`** — run those manually or extend the workflow when ready. **`seed_statcast_running`** and **`calc_baserunning_season_metrics`** are now wired into GA (after pitching season metrics).
 
 ---
 
