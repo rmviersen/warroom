@@ -30,8 +30,10 @@ export async function GET(
   const season = parseSeason(searchParams.get("season"));
 
   const { data, error } = await supabase
-    .from("team_position_wpr_season")
-    .select("position, bwpr, fwpr, brwpr, wpr, pwpr, player_count")
+    .from("team_position_wpr_ranked")
+    .select(
+      "position, bwpr, fwpr, brwpr, wpr, pwpr, player_count, bwpr_rank, fwpr_rank, brwpr_rank, wpr_rank, pwpr_rank, team_count",
+    )
     .eq("team_id", teamId)
     .eq("season", season);
 

@@ -526,7 +526,7 @@ export interface StatcastPitch {
 // Team position WPR
 // =============================================================================
 
-/** One row from GET /api/teams/[id]/position-wpr (team_position_wpr_season view). */
+/** One row from GET /api/teams/[id]/position-wpr (team_position_wpr_ranked view). */
 export interface TeamPositionWprRow {
   /** Defensive position code: P | C | 1B | 2B | 3B | SS | LF | CF | RF | OF */
   position: string;
@@ -542,6 +542,18 @@ export interface TeamPositionWprRow {
   pwpr: number | null;
   /** Number of distinct players contributing to this position. */
   player_count: number;
+  /** MLB rank for bwpr at this position (1 = best). Null for P slot. */
+  bwpr_rank?: number | null;
+  /** MLB rank for fwpr at this position. Null for P slot. */
+  fwpr_rank?: number | null;
+  /** MLB rank for brwpr at this position. Null for P slot. */
+  brwpr_rank?: number | null;
+  /** MLB rank for wpr at this position. Null for P slot. */
+  wpr_rank?: number | null;
+  /** MLB rank for pwpr at this position. Non-null for P slot only. */
+  pwpr_rank?: number | null;
+  /** Number of teams with data at this position (denominator for rank display). */
+  team_count?: number | null;
 }
 
 /** One player row from GET /api/teams/[id]/position-wpr/players. */
