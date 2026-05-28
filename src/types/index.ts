@@ -544,6 +544,34 @@ export interface TeamPositionWprRow {
   player_count: number;
 }
 
+/** One player row from GET /api/teams/[id]/position-wpr/players. */
+export interface TeamPositionWprPlayerRow {
+  /** Defensive position this row is attributed to. */
+  position: string;
+  player_id: number;
+  player_name: string | null;
+  /** Innings at this position (IP for pitchers). */
+  inn: number | null;
+  /** Fraction of this player's total innings spent at this position (0–1). */
+  inn_share: number | null;
+  /** player.bwpr × inn_share. Null for P slot. */
+  bwpr_attr: number | null;
+  /** player.fwpr × inn_share. Null for P slot. */
+  fwpr_attr: number | null;
+  /** player.brwpr × inn_share. Null for P slot. */
+  brwpr_attr: number | null;
+  /** player.wpr × inn_share. Null for P slot. */
+  wpr_attr: number | null;
+  /** pitcher's season pwpr (un-weighted — already their individual contribution). Non-null for P only. */
+  pwpr_attr: number | null;
+}
+
+/** GET /api/teams/[id]/position-wpr/players JSON body. */
+export interface TeamPositionWprPlayersApiResponse {
+  players: TeamPositionWprPlayerRow[];
+  season: number;
+}
+
 /** GET /api/teams/[id]/position-wpr JSON body. */
 export interface TeamPositionWprApiResponse {
   positions: TeamPositionWprRow[];
