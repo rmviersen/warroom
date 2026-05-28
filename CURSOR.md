@@ -1,14 +1,14 @@
 # WARroom — Cursor Frontend Briefing
 
-> **Your branch: `feat/frontend-ui`**
-> Always work on this branch. Never commit to `main` directly.
-> Claude Code works on `feat/pipeline-wpr` (backend/database) — those branches do not overlap.
+> **Branch:** A new feature branch will be provided by Claude Code at the start of each session.
+> Always work on that branch. Never commit to `main` directly.
+> Claude Code owns `pipeline/`, `supabase/migrations/`, `SCHEMA.md`, `HANDOFF.md`, `CLAUDE.md` — do not touch those paths.
 
 ---
 
 ## What this project is
 
-WARroom is an MLB analytics platform. It pulls live MLB schedule/standings data and Statcast data from a Supabase Postgres database, and displays it in a dark-themed Next.js app. The core product is a set of proprietary WPR metrics (Wins above replacement, WARroom-style) — bWPR (batting), fWPR (fielding), brWPR (baserunning), pWPR (pitching).
+WARroom is an MLB analytics platform. It pulls live MLB schedule/standings data and Statcast data from a Supabase Postgres database, and displays it in a dark-themed Next.js app. The core product is a set of proprietary WPR metrics (WARroom-style wins above replacement) — bWPR (batting), fWPR (fielding), brWPR (baserunning), pWPR (pitching), and Total WPR.
 
 ---
 
@@ -37,7 +37,7 @@ App runs at `http://localhost:3000`.
 
 ---
 
-## Repo structure — frontend only
+## Repo structure — frontend
 
 ```
 src/
@@ -49,6 +49,7 @@ src/
       leaderboards/
         batting/route.ts              ← GET /api/leaderboards/batting
         pitching/route.ts             ← GET /api/leaderboards/pitching
+        baserunning/route.ts          ← GET /api/leaderboards/baserunning
       players/
         route.ts                      ← GET /api/players
         [id]/route.ts                 ← GET /api/players/[id]
@@ -58,28 +59,38 @@ src/
       statcast/
         leaderboard/route.ts
         pitches/route.ts
+      status/route.ts                 ← GET /api/status (RAG pipeline health)
       teams/
         route.ts
         [id]/route.ts
         [id]/statcast/route.ts
+        [id]/position-wpr/route.ts    ← GET /api/teams/[id]/position-wpr?season=YYYY
+        [id]/position-wpr/players/route.ts  ← GET /api/teams/[id]/position-wpr/players?season=YYYY
     leaderboards/
       batting/page.tsx                ← bWPR / batting leaderboard
       pitching/page.tsx               ← pWPR / pitching leaderboard
+      baserunning/page.tsx            ← brWPR / baserunning leaderboard
     players/
       page.tsx                        ← player search/list
       [id]/page.tsx                   ← individual player profile
     statcast/page.tsx
+    status/page.tsx                   ← RAG health dashboard (pipeline status)
     teams/
+      layout.tsx
       page.tsx
-      [id]/page.tsx
+      [id]/page.tsx                   ← team overview with WPR by position (field view + table)
   components/
     layout/
-      Navbar.tsx                      ← sticky top nav; has dropdown for Leaderboards
+      Navbar.tsx                      ← sticky top nav; Leaderboards dropdown
       Footer.tsx
     ui/
+      BaseballFieldView.tsx           ← SVG baseball field with per-position WPR cards
       BatterStatcastSection.tsx
       PitcherStatcastSection.tsx
       PercentileBar.tsx
+      PlayerCurrentSeasonPanel.tsx    ← current season stats + WPR panel for player profiles
+      PlayerProfileBanner.tsx         ← player header with name, position, team, WPR summary
+      TeamWprDiamond.tsx              ← team WPR by position table with expandable player rows
       WARroomLogo.tsx
   lib/
     supabase.ts                       ← Supabase browser client (anon key)
@@ -87,13 +98,15 @@ src/
     mlb-images.ts                     ← team logo URL helper
     mlb-player-stats.ts
     mlb-team-stats.ts
+    mlb-team-overview.ts              ← team-level data fetching helpers
+    playoff-teams.ts                  ← playoff team list helpers
     formulas/
       batting.ts
       pitching.ts
       fielding.ts
       index.ts
   types/
-    index.ts                          ← shared TypeScript types
+    index.ts                          ← shared TypeScript types (TeamPositionWprRow, etc.)
 ```
 
 ---
@@ -104,7 +117,7 @@ src/
 | Use | Value |
 |-----|-------|
 | Navy (primary brand) | `#1e3a6b` |
-| Gold — **WPR metrics ONLY** | `#b8922a` (use `#c9a84c` / `#c9a84c` for nav accents — check existing Navbar) |
+| Gold — **WPR metrics ONLY** | `#b8922a` |
 | Accent / active states | Red (`red-500`, `red-400`, etc.) |
 | Background dark | `gray-950`, `gray-900` |
 | Text primary | `white`, `gray-100` |
@@ -127,7 +140,7 @@ src/
 The Navbar (`src/components/layout/Navbar.tsx`) has:
 - **WARroom** logo (left) → links to `/`
 - Nav items (right): **Teams** · **Players** · **Leaderboards** (dropdown) · **Statcast**
-- **Leaderboards dropdown** reveals: Batting · Pitching (hover-activated)
+- **Leaderboards dropdown** reveals: Batting · Pitching · Baserunning
 
 ### Adding a new leaderboard to the dropdown
 Edit the `LeaderboardsDropdown` component in `Navbar.tsx` and add a new `<Link>` entry. Match the existing `subCls()` pattern for active state styling.
@@ -136,17 +149,17 @@ Edit the `LeaderboardsDropdown` component in `Navbar.tsx` and add a new `<Link>`
 
 ## Available data — what Supabase has
 
-All data is read via the API routes (which use the service role server-side) or directly via `src/lib/supabase.ts` (anon key, respects RLS — public read is enabled on all tables).
+All data is read via the API routes (server-side) or directly via `src/lib/supabase.ts` (anon key, respects RLS — public read is enabled on all tables and views).
 
 ### Key tables and their useful columns
 
 **`player_batting_seasons`** — one row per player per season per team
-- `player_id` (MLBAM int), `season`, `team_id`
+- `player_id` (MLBAM int), `season`, `team_id`, `team`
 - Counting stats: `g`, `pa`, `ab`, `h`, `hr`, `rbi`, `sb`, `cs`, `bb`, `so`, `avg`, `obp`, `slg`, `ops`
-- WPR metrics: **`bwpr`**, **`fwpr`**, **`brwpr`** (all stored; `wpr` total coming soon)
+- WPR metrics: **`bwpr`**, **`fwpr`**, **`brwpr`**, **`wpr`** (total = bwpr + fwpr + brwpr)
 
 **`player_pitching_seasons`** — one row per pitcher per season per team
-- `player_id`, `season`, `team_id`
+- `player_id`, `season`, `team_id`, `team`
 - Stats: `w`, `l`, `era`, `g`, `gs`, `ip`, `so`, `bb`, `whip`, `fip`
 - WPR metric: **`pwpr`**
 
@@ -161,33 +174,68 @@ All data is read via the API routes (which use the service role server-side) or 
 **`statcast_running`** — Sprint speed data (2015+)
 - `player_id`, `season`, `sprint_speed`, `hp_to_1b`, `bolts`, `competitive_runs`, `bolt_rate`
 
+**`statcast_baserunning_rv`** — Statcast baserunning run values (2016+)
+- `player_id`, `season`, `running_runs`, `extra_bases_taken`, `outs_made`, `bases_advanced`
+- Source of **brWPR** for modern seasons
+
 **`players`** — Player registry
 - `id` (MLBAM), `full_name`, `team`, `team_id`, `position`, `bats`, `throws`
 
 **`teams`** — Team registry
 - `id` (MLBAM), `name`, `abbreviation`, `team_code`
 
+### Key views (read the same way as tables via Supabase client)
+
+**`player_season_wpr_totals`** — Unified WPR for every player type
+- `player_id`, `player_name`, `season`, `team_id`, `team`
+- `bwpr`, `fwpr`, `brwpr`, `wpr` (position player total), `pwpr` (pitching)
+- **`total_wpr`** = `ROUND(COALESCE(wpr, 0) + COALESCE(pwpr, 0), 1)` — use this for cross-player WPR comparisons and leaderboards
+- Covers position players, pitchers, and two-way players
+
+**`team_position_wpr_season`** — Innings-weighted team WPR per defensive position
+- `team_id`, `season`, `position`, `bwpr`, `fwpr`, `brwpr`, `wpr`, `pwpr`, `player_count`
+- Used by `BaseballFieldView` and `TeamWprDiamond`
+- **Do not query this directly for rankings** — the API route at `teams/[id]/position-wpr` computes MLB-wide ranks in TypeScript
+
+**`team_position_wpr_players_season`** — Per-player contribution within each team/position
+- `team_id`, `season`, `position`, `player_id`, `player_name`, `inn`, `inn_share`
+- `bwpr_attr`, `fwpr_attr`, `brwpr_attr`, `wpr_attr`, `pwpr_attr`
+- Used by expandable rows in `TeamWprDiamond`
+
 ---
 
-## What to build on `feat/frontend-ui`
+## Position WPR — how the team page works
 
-### Priority 1 — Baserunning leaderboard page
-**File to create:** `src/app/leaderboards/baserunning/page.tsx`
-**API route to create:** `src/app/api/leaderboards/baserunning/route.ts`
+The team page (`src/app/teams/[id]/page.tsx`) loads team data first, then uses `stats.season` for downstream calls. **Never fire WPR or Statcast fetches in parallel with the team fetch** — you need `stats.season` before making those calls.
 
-Query `player_batting_seasons` joined with `players` for `brwpr`, `sb`, `cs`. Show columns: Rank, Player, Team, Season, SB, CS, brWPR (gold). Filter by season (default 2026). Sort by brWPR descending. Add to the Navbar Leaderboards dropdown.
+The position WPR API (`/api/teams/[id]/position-wpr`) returns:
+```typescript
+{
+  positions: TeamPositionWprRow[],  // one per position (C, 1B, 2B, 3B, SS, LF, CF, RF, P)
+  season: number
+}
+```
 
-### Priority 2 — Add brWPR column to batting leaderboard
-The batting leaderboard at `/leaderboards/batting` currently shows bWPR. Add `brwpr` as a column alongside `bwpr` and `fwpr` to give a more complete picture.
+Each `TeamPositionWprRow` includes MLB-wide rank fields: `bwpr_rank`, `fwpr_rank`, `brwpr_rank`, `wpr_rank`, `pwpr_rank` (1 = best in MLB), and `team_count` (denominator, usually 30).
 
-### Priority 3 — Player profile: brWPR & sprint speed section
-In `src/app/players/[id]/page.tsx`, add a baserunning section that shows:
-- brWPR (gold, bold)
-- Sprint speed (if available from `statcast_running` — 2015+)
-- SB / CS / bolt rate
+---
 
-### Priority 4 — WPR total rollup display (when backend delivers it)
-The `wpr` column on `player_batting_seasons` will be populated by the backend pipeline soon. Once it is, add a "Total WPR" display on player profiles and a combined WPR leaderboard.
+## What to build next (priority order)
+
+### Priority 1 — Total WPR leaderboard
+**File to create:** `src/app/leaderboards/wpr/page.tsx`
+**API route to create:** `src/app/api/leaderboards/wpr/route.ts`
+
+Query `player_season_wpr_totals` view. Show columns: Rank, Player, Team, Season, bWPR, fWPR, brWPR, pWPR, **Total WPR** (gold, bold). Filter by season (default 2026). Sort by `total_wpr` descending. Add to the Navbar Leaderboards dropdown. This is the flagship cross-player leaderboard — treat it as a hero feature.
+
+### Priority 2 — Player profile: Total WPR summary card
+In `src/app/players/[id]/page.tsx`, add a WPR summary section that shows all components a player has (bWPR + fWPR + brWPR + pWPR where applicable), with a bolded Total WPR line. Two-way players (Ohtani) will have both batting and pitching rows — handle both. Use `player_season_wpr_totals` as the data source.
+
+### Priority 3 — Status page polish
+`src/app/status/page.tsx` is functional but may need visual polish to match the rest of the platform. Ensure the RAG color coding (green/amber/red) is consistent with brand colors (use red for down, gold/amber for warning, green for healthy).
+
+### Priority 4 — brWPR column on batting leaderboard
+The batting leaderboard at `/leaderboards/batting` shows bWPR. Add `brwpr` and the `wpr` total as additional columns to give a more complete position-player picture.
 
 ---
 
@@ -217,11 +265,20 @@ Never use the service role key in frontend code. The anon key + RLS is the corre
 
 ---
 
+## Known gotchas
+
+- **`team_id` can be a string from Supabase** — always use `Number(id)` before comparing, never strict `===` against a number literal.
+- **Load order on team page** — fetch team first to get `stats.season`, then fire WPR/Statcast calls with that season. Don't use `new Date().getFullYear()` as a fallback.
+- **Views flagged as "unrestricted" in Supabase dashboard** — this is a known dashboard artifact for views. The views are secure; their underlying tables all have RLS enabled.
+- **PostgREST row cap** — `.select()` returns a max of 1000 rows by default. Use `.range(offset, offset + 999)` for large tables.
+
+---
+
 ## Merging back to main
 
 When your frontend work is ready:
-1. Commit your changes on `feat/frontend-ui`
-2. Push: `git push origin feat/frontend-ui`
+1. Commit your changes on the feature branch
+2. Push: `git push origin <branch-name>`
 3. Tell Rees — he will coordinate the merge with Claude Code
 
-Do not merge `feat/pipeline-wpr` into `feat/frontend-ui` or vice versa — they will both merge into `main` independently.
+Do not merge feature branches into each other — they will each merge into `main` independently.
