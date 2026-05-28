@@ -240,10 +240,40 @@ export interface Team {
 /** Team hitting line for GET /api/teams/[id] (season totals). */
 export interface TeamSeasonHittingSummary {
   avg: string | null;
+  slg: string | null;
   ops: string | null;
   homeRuns: number | null;
   rbi: number | null;
   runs: number | null;
+}
+
+/** One stat value plus MLB-wide rank for the teams overview grid. */
+export interface TeamOverviewStat {
+  value: string | null;
+  rank: number | null;
+}
+
+/** Compact team card payload for GET /api/teams. */
+export interface TeamOverview {
+  id: number;
+  name: string | null;
+  division: string | null;
+  league: string | null;
+  league_id: number | null;
+  wins: number;
+  losses: number;
+  /** Division leader or on the right side of the WC cutoff (+ / - / 0 WC GB). */
+  playoff_position: boolean;
+  pitching: {
+    era: TeamOverviewStat;
+    whip: TeamOverviewStat;
+  };
+  hitting: {
+    avg: TeamOverviewStat;
+    slg: TeamOverviewStat;
+    ops: TeamOverviewStat;
+    homeRuns: TeamOverviewStat;
+  };
 }
 
 /** Team pitching line for GET /api/teams/[id] (season totals). */
@@ -463,4 +493,34 @@ export interface StatcastPitch {
   home_team: string | null;
   away_team: string | null;
   created_at?: string | null;
+}
+
+// =============================================================================
+// Pipeline status / RAG tracker
+// =============================================================================
+
+/** Red / Amber / Green freshness indicator. */
+export type RagStatus = "green" | "amber" | "red";
+
+/** Logical grouping for status checks. */
+export type StatusCategory = "pitch_ingest" | "season_seeds" | "wpr_health";
+
+/** One data-source health check returned by GET /api/status. */
+export interface StatusCheck {
+  id: string;
+  label: string;
+  status: RagStatus;
+  /** Human-readable detail: date string, row count, or error text. */
+  detail: string;
+  category: StatusCategory;
+}
+
+/** GET /api/status JSON body. */
+export interface StatusApiResponse {
+  checks: StatusCheck[];
+  /** Season the season-scoped checks are evaluated against. */
+  season: number;
+  /** ISO timestamp when the response was generated. */
+  generatedAt: string;
+  summary: { green: number; amber: number; red: number };
 }
