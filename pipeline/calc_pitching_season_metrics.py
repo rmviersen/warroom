@@ -51,7 +51,24 @@ _METRIC_KEYS = (
     "era_plus",
     "lob_pct",
     "pwpr",
+    "pitcher_role",
 )
+
+
+def _classify_pitcher_role(g: Any, gs: Any) -> str | None:
+    """Return 'SP', 'RP', or None based on games-started share.
+
+    Rule: gs / g >= 0.5 → SP; else → RP.
+    Returns None when g is zero or unavailable (no appearances recorded).
+    """
+    try:
+        g_int = int(g)
+        gs_int = int(gs) if gs is not None else 0
+    except (TypeError, ValueError):
+        return None
+    if g_int <= 0:
+        return None
+    return "SP" if gs_int / g_int >= 0.5 else "RP"
 
 
 def get_mlb_games_played(client: Any, season: int) -> float:
@@ -262,6 +279,10 @@ def derive_row_payload(
         out["lob_pct"] = round(float(lob_pct_v), 4)
     if pwpr_val is not None:
         out["pwpr"] = pwpr_val
+
+    role = _classify_pitcher_role(row.get("g"), row.get("gs"))
+    if role is not None:
+        out["pitcher_role"] = role
 
     if not any(k in out for k in _METRIC_KEYS):
         return None
