@@ -6,6 +6,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getTeamLogoUrl } from "@/lib/mlb-images";
+import {
+  isDivisionLeader,
+  isWildCardPlayoffPosition,
+  playoffFirstCellClass,
+  playoffRowClass,
+} from "@/lib/playoff-teams";
 import type { StandingRow } from "@/types";
 
 const AL_LEAGUE_ID = 103;
@@ -291,13 +297,6 @@ function formatLiveSituation(game: ScheduleGame): string {
   return [half, outs, bases].filter(Boolean).join(" · ");
 }
 
-function isDivisionLeader(gamesBack: string): boolean {
-  const t = gamesBack.trim();
-  return (
-    t === "" || t === "-" || t === "—" || t === "0" || t === "0.0"
-  );
-}
-
 function TeamLogoImage({
   teamId,
   size,
@@ -370,7 +369,7 @@ function GamesBanner({ games }: { games: ScheduleGame[] }) {
 
   if (games.length === 0) {
     return (
-      <p className="rounded-xl border border-gray-800 bg-gray-900/30 py-8 text-center text-sm text-gray-500">
+      <p className="rounded-xl border border-[#d0daea] bg-[#f4f7fb] py-8 text-center text-sm text-[#7a8fa8]">
         No games on the schedule for today.
       </p>
     );
@@ -379,15 +378,15 @@ function GamesBanner({ games }: { games: ScheduleGame[] }) {
   const showArrows = overflowing;
 
   return (
-    <div className="relative rounded-xl border border-gray-800/80 bg-gray-950/30 px-0.5 py-1">
+    <div className="relative rounded-xl border border-[#d0daea] bg-[#f4f7fb] px-0.5 py-1">
       {showArrows ? (
         <>
           <div
-            className="pointer-events-none absolute inset-y-1 left-0 z-10 w-14 rounded-l-xl bg-gradient-to-r from-gray-950 from-25% via-gray-950/75 to-transparent"
+            className="pointer-events-none absolute inset-y-1 left-0 z-10 w-14 rounded-l-xl bg-gradient-to-r from-[#f4f7fb] from-25% via-[#f4f7fb]/75 to-transparent"
             aria-hidden
           />
           <div
-            className="pointer-events-none absolute inset-y-1 right-0 z-10 w-14 rounded-r-xl bg-gradient-to-l from-gray-950 from-25% via-gray-950/75 to-transparent"
+            className="pointer-events-none absolute inset-y-1 right-0 z-10 w-14 rounded-r-xl bg-gradient-to-l from-[#f4f7fb] from-25% via-[#f4f7fb]/75 to-transparent"
             aria-hidden
           />
           <button
@@ -395,7 +394,7 @@ function GamesBanner({ games }: { games: ScheduleGame[] }) {
             aria-label="Scroll games left"
             disabled={!canScrollLeft}
             onClick={() => scrollByDirection(-1)}
-            className="absolute left-1 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-700/90 bg-gray-900/95 text-gray-200 shadow-lg shadow-black/40 backdrop-blur-sm transition hover:border-red-500/50 hover:bg-gray-800 hover:text-white disabled:pointer-events-none disabled:opacity-20"
+            className="absolute left-1 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0daea] bg-white text-[#1e3a6b] shadow-md transition hover:border-[#1e3a6b] hover:bg-[#f4f7fb] disabled:pointer-events-none disabled:opacity-20"
           >
             <ChevronLeft className="h-5 w-5" strokeWidth={2.25} />
           </button>
@@ -404,7 +403,7 @@ function GamesBanner({ games }: { games: ScheduleGame[] }) {
             aria-label="Scroll games right"
             disabled={!canScrollRight}
             onClick={() => scrollByDirection(1)}
-            className="absolute right-1 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-700/90 bg-gray-900/95 text-gray-200 shadow-lg shadow-black/40 backdrop-blur-sm transition hover:border-red-500/50 hover:bg-gray-800 hover:text-white disabled:pointer-events-none disabled:opacity-20"
+            className="absolute right-1 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0daea] bg-white text-[#1e3a6b] shadow-md transition hover:border-[#1e3a6b] hover:bg-[#f4f7fb] disabled:pointer-events-none disabled:opacity-20"
           >
             <ChevronRight className="h-5 w-5" strokeWidth={2.25} />
           </button>
@@ -460,14 +459,14 @@ function CompactGameCard({ game }: { game: ScheduleGame }) {
 
   const shell =
     visual === "live"
-      ? "border-red-500/40 bg-gradient-to-b from-red-950/30 to-gray-950/90 ring-1 ring-red-500/20"
+      ? "border-red-400/60 bg-gradient-to-b from-red-50 to-white ring-1 ring-red-500/15"
       : visual === "final"
-        ? "border-gray-800/90 bg-gray-950/50 saturate-90 opacity-95"
-        : "border-gray-800 bg-gray-900/40";
+        ? "border-[#d0daea] bg-[#f4f7fb]/80 saturate-90 opacity-95"
+        : "border-[#d0daea] bg-white";
 
   return (
     <article
-      className={`flex min-w-[152px] max-w-[176px] shrink-0 flex-col rounded-lg border px-2 py-2 shadow-sm shadow-black/25 transition-colors ${shell}`}
+      className={`flex min-w-[152px] max-w-[176px] shrink-0 flex-col rounded-lg border px-2 py-2 shadow-sm shadow-[#1e3a6b]/5 transition-colors ${shell}`}
     >
       <div className="mb-1.5 flex items-center gap-1">
         {visual === "live" ? (
@@ -480,7 +479,7 @@ function CompactGameCard({ game }: { game: ScheduleGame }) {
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
           </span>
         ) : null}
-        <span className="text-[8px] font-bold uppercase tracking-widest text-gray-500">
+        <span className="text-[8px] font-bold uppercase tracking-widest text-[#7a8fa8]">
           {visual === "live"
             ? "Live"
             : visual === "final"
@@ -498,16 +497,16 @@ function CompactGameCard({ game }: { game: ScheduleGame }) {
               teamName={awayTeamName}
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold leading-tight text-gray-100">
+              <p className="truncate font-semibold leading-tight text-[#0f2044]">
                 {awayAbbr}
               </p>
-              <p className="tabular-nums text-[9px] text-gray-500">{awayWL}</p>
+              <p className="tabular-nums text-[9px] text-[#7a8fa8]">{awayWL}</p>
             </div>
           </div>
           {hasScore ? (
             <span
               className={`shrink-0 tabular-nums text-sm font-bold leading-none ${
-                visual === "live" ? "text-white" : "text-gray-400"
+                visual === "live" ? "text-[#0f2044]" : "text-[#7a8fa8]"
               }`}
             >
               {aScore}
@@ -522,16 +521,16 @@ function CompactGameCard({ game }: { game: ScheduleGame }) {
               teamName={homeTeamName}
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold leading-tight text-gray-100">
+              <p className="truncate font-semibold leading-tight text-[#0f2044]">
                 {homeAbbr}
               </p>
-              <p className="tabular-nums text-[9px] text-gray-500">{homeWL}</p>
+              <p className="tabular-nums text-[9px] text-[#7a8fa8]">{homeWL}</p>
             </div>
           </div>
           {hasScore ? (
             <span
               className={`shrink-0 tabular-nums text-sm font-bold leading-none ${
-                visual === "live" ? "text-white" : "text-gray-400"
+                visual === "live" ? "text-[#0f2044]" : "text-[#7a8fa8]"
               }`}
             >
               {hScore}
@@ -540,40 +539,40 @@ function CompactGameCard({ game }: { game: ScheduleGame }) {
         </div>
       </div>
 
-      <div className="mt-auto border-t border-gray-800/70 pt-1.5">
+      <div className="mt-auto border-t border-[#f0f4f9] pt-1.5">
         {visual === "scheduled" ? (
           <>
             <time
-              className="text-[10px] font-medium tabular-nums text-gray-400"
+              className="text-[10px] font-medium tabular-nums text-[#7a8fa8]"
               dateTime={game.gameDate}
             >
               {timeLabel}
             </time>
             <div className="mt-1.5 space-y-0.5">
               <p
-                className="truncate text-[9px] leading-snug text-gray-500"
+                className="truncate text-[9px] leading-snug text-[#7a8fa8]"
                 title={`${awayAbbr}: ${awayProbable ?? "TBA"}${probablePitcherSeasonSuffix(away?.probablePitcher)}`}
               >
-                <span className="font-semibold tabular-nums text-gray-400">
+                <span className="font-semibold tabular-nums text-[#1e3050]">
                   {awayAbbr}
                 </span>{" "}
-                <span className="text-gray-500">
+                <span className="text-[#7a8fa8]">
                   {awayProbable ?? "TBA"}
-                  <span className="tabular-nums text-gray-500">
+                  <span className="tabular-nums text-[#7a8fa8]">
                     {probablePitcherSeasonSuffix(away?.probablePitcher)}
                   </span>
                 </span>
               </p>
               <p
-                className="truncate text-[9px] leading-snug text-gray-500"
+                className="truncate text-[9px] leading-snug text-[#7a8fa8]"
                 title={`${homeAbbr}: ${homeProbable ?? "TBA"}${probablePitcherSeasonSuffix(home?.probablePitcher)}`}
               >
-                <span className="font-semibold tabular-nums text-gray-400">
+                <span className="font-semibold tabular-nums text-[#1e3050]">
                   {homeAbbr}
                 </span>{" "}
-                <span className="text-gray-500">
+                <span className="text-[#7a8fa8]">
                   {homeProbable ?? "TBA"}
-                  <span className="tabular-nums text-gray-500">
+                  <span className="tabular-nums text-[#7a8fa8]">
                     {probablePitcherSeasonSuffix(home?.probablePitcher)}
                   </span>
                 </span>
@@ -582,12 +581,12 @@ function CompactGameCard({ game }: { game: ScheduleGame }) {
           </>
         ) : null}
         {visual === "live" ? (
-          <p className="line-clamp-2 text-[9px] leading-snug text-gray-400">
+          <p className="line-clamp-2 text-[9px] leading-snug text-[#7a8fa8]">
             {liveLine}
           </p>
         ) : null}
         {visual === "final" ? (
-          <p className="text-[9px] text-gray-500">Final</p>
+          <p className="text-[9px] text-[#7a8fa8]">Final</p>
         ) : null}
       </div>
     </article>
@@ -598,20 +597,16 @@ function CompactGameCard({ game }: { game: ScheduleGame }) {
 function StandingsTeamNameCell({
   teamId,
   teamName,
-  leader,
 }: {
   teamId: number;
   teamName: string;
-  leader: boolean;
 }) {
-  const textClass = leader ? "font-medium text-white" : "text-gray-200";
-
   const nameEl = !teamId ? (
-    <span className={textClass}>{teamName}</span>
+    <span className="text-[#1e3050]">{teamName}</span>
   ) : (
     <Link
       href={`/teams/${teamId}`}
-      className={`inline-block ${textClass} underline-offset-2 decoration-gray-400/75 hover:underline`}
+      className="inline-block text-[#1e3050] underline-offset-2 decoration-[#7a8fa8]/75 hover:text-[#1e3a6b] hover:underline"
     >
       {teamName}
     </Link>
@@ -629,7 +624,7 @@ function DivisionStandingsTable({ rows }: { rows: StandingRow[] }) {
   return (
     <table className="w-full text-left">
       <thead>
-        <tr className="border-b border-gray-800/90 text-[10px] text-gray-500 uppercase tracking-wider">
+        <tr className="border-b border-[#f0f4f9] text-[10px] text-[#7a8fa8] uppercase tracking-wider">
           <th className="px-2 py-1.5 font-medium">Team</th>
           <th className="px-1 py-1.5 font-medium text-right">W</th>
           <th className="px-1 py-1.5 font-medium text-right">L</th>
@@ -639,53 +634,30 @@ function DivisionStandingsTable({ rows }: { rows: StandingRow[] }) {
       </thead>
       <tbody>
         {rows.map((row, i) => {
-          const leader = isDivisionLeader(row.gamesBack);
+          const playoff = isDivisionLeader(row.gamesBack);
           return (
             <tr
               key={`${row.teamId}-${row.teamName}-${row.divisionName}-${i}`}
-              className={`border-b border-gray-800/50 transition-colors hover:bg-gray-800/15 ${
-                leader
-                  ? "bg-gradient-to-r from-red-950/15 via-transparent to-transparent"
-                  : ""
-              }`}
+              className={`border-b border-[#f0f4f9] transition-colors hover:bg-[#f4f7fb] ${playoffRowClass(playoff)}`}
             >
               <td
-                className={`relative px-2 py-1 text-xs whitespace-nowrap ${
-                  leader ? "border-l-2 border-l-red-500 pl-1.5" : ""
-                }`}
+                className={`relative px-2 py-1 text-xs whitespace-nowrap ${playoffFirstCellClass(playoff)}`}
               >
                 <StandingsTeamNameCell
-                  leader={leader}
                   teamId={row.teamId}
                   teamName={row.teamName}
                 />
               </td>
-              <td
-                className={`px-1 py-1 text-right text-xs tabular-nums ${
-                  leader ? "font-medium text-gray-100" : "text-gray-300"
-                }`}
-              >
+              <td className="px-1 py-1 text-right text-xs tabular-nums text-[#1e3050]">
                 {row.wins}
               </td>
-              <td
-                className={`px-1 py-1 text-right text-xs tabular-nums ${
-                  leader ? "font-medium text-gray-100" : "text-gray-300"
-                }`}
-              >
+              <td className="px-1 py-1 text-right text-xs tabular-nums text-[#1e3050]">
                 {row.losses}
               </td>
-              <td
-                className={`px-1 py-1 text-right text-xs tabular-nums ${
-                  leader ? "font-medium text-gray-100" : "text-gray-300"
-                }`}
-              >
+              <td className="px-1 py-1 text-right text-xs tabular-nums text-[#1e3050]">
                 {row.pct}
               </td>
-              <td
-                className={`px-2 py-1 text-right text-xs tabular-nums ${
-                  leader ? "font-medium text-red-400/90" : "text-gray-400"
-                }`}
-              >
+              <td className="px-2 py-1 text-right text-xs tabular-nums text-[#7a8fa8]">
                 {row.gamesBack}
               </td>
             </tr>
@@ -704,11 +676,11 @@ function DivisionStandingsSection({
   rows: StandingRow[];
 }) {
   return (
-    <div className="border-b border-gray-800/50 pb-2.5 last:border-b-0 last:pb-0">
-      <h4 className="mb-1 text-xs font-semibold tracking-tight text-red-400/95">
+    <div className="border-b border-[#f0f4f9] pb-2.5 last:border-b-0 last:pb-0">
+      <h4 className="mb-1 text-xs font-semibold tracking-tight text-[#1e3a6b]">
         {divisionName}
       </h4>
-      <div className="overflow-x-auto rounded-md border border-gray-800/70 bg-gray-950/25">
+      <div className="overflow-x-auto rounded-md border border-[#d0daea] bg-white">
         <DivisionStandingsTable rows={rows} />
       </div>
     </div>
@@ -718,7 +690,7 @@ function DivisionStandingsSection({
 function WildCardStandingsTable({ rows }: { rows: WildCardRow[] }) {
   if (rows.length === 0) {
     return (
-      <p className="px-2 py-2 text-center text-xs text-gray-500">
+      <p className="px-2 py-2 text-center text-xs text-[#7a8fa8]">
         No wild card data
       </p>
     );
@@ -727,7 +699,7 @@ function WildCardStandingsTable({ rows }: { rows: WildCardRow[] }) {
   return (
     <table className="w-full text-left">
       <thead>
-        <tr className="border-b border-gray-800/90 text-[10px] text-gray-500 uppercase tracking-wider">
+        <tr className="border-b border-[#f0f4f9] text-[10px] text-[#7a8fa8] uppercase tracking-wider">
           <th className="px-2 py-1.5 font-medium">Team</th>
           <th className="px-1 py-1.5 font-medium text-right">W</th>
           <th className="px-1 py-1.5 font-medium text-right">L</th>
@@ -737,53 +709,30 @@ function WildCardStandingsTable({ rows }: { rows: WildCardRow[] }) {
       </thead>
       <tbody>
         {rows.map((row, i) => {
-          const wcLeader = i === 0;
+          const playoff = isWildCardPlayoffPosition(row.wildCardGamesBack);
           return (
             <tr
               key={`${row.teamId}-${row.teamName}-wc-${i}`}
-              className={`border-b border-gray-800/50 transition-colors hover:bg-gray-800/15 ${
-                wcLeader
-                  ? "bg-gradient-to-r from-red-950/12 via-transparent to-transparent"
-                  : ""
-              }`}
+              className={`border-b border-[#f0f4f9] transition-colors hover:bg-[#f4f7fb] ${playoffRowClass(playoff)}`}
             >
               <td
-                className={`relative px-2 py-1 text-xs whitespace-nowrap ${
-                  wcLeader ? "border-l-2 border-l-red-500/80 pl-1.5" : ""
-                }`}
+                className={`relative px-2 py-1 text-xs whitespace-nowrap ${playoffFirstCellClass(playoff)}`}
               >
                 <StandingsTeamNameCell
-                  leader={wcLeader}
                   teamId={row.teamId}
                   teamName={row.teamName}
                 />
               </td>
-              <td
-                className={`px-1 py-1 text-right text-xs tabular-nums ${
-                  wcLeader ? "text-gray-100" : "text-gray-300"
-                }`}
-              >
+              <td className="px-1 py-1 text-right text-xs tabular-nums text-[#1e3050]">
                 {row.wins}
               </td>
-              <td
-                className={`px-1 py-1 text-right text-xs tabular-nums ${
-                  wcLeader ? "text-gray-100" : "text-gray-300"
-                }`}
-              >
+              <td className="px-1 py-1 text-right text-xs tabular-nums text-[#1e3050]">
                 {row.losses}
               </td>
-              <td
-                className={`px-1 py-1 text-right text-xs tabular-nums ${
-                  wcLeader ? "text-gray-100" : "text-gray-300"
-                }`}
-              >
+              <td className="px-1 py-1 text-right text-xs tabular-nums text-[#1e3050]">
                 {row.pct}
               </td>
-              <td
-                className={`px-2 py-1 text-right text-xs tabular-nums ${
-                  wcLeader ? "text-red-400/85" : "text-gray-400"
-                }`}
-              >
+              <td className="px-2 py-1 text-right text-xs tabular-nums text-[#7a8fa8]">
                 {row.wildCardGamesBack}
               </td>
             </tr>
@@ -804,9 +753,9 @@ function LeagueStandingsColumn({
   wildCardRows: WildCardRow[];
 }) {
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border border-gray-800/90 bg-gray-900/40">
-      <div className="border-b border-gray-800/90 bg-gray-900/90 px-2.5 py-2">
-        <h3 className="text-sm font-semibold tracking-wide text-white">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-[#d0daea] bg-white">
+      <div className="border-b border-[#d0daea] bg-[#f4f7fb] px-2.5 py-2">
+        <h3 className="text-sm font-semibold tracking-wide text-[#0f2044]">
           {title}
         </h3>
       </div>
@@ -819,18 +768,18 @@ function LeagueStandingsColumn({
           />
         ))}
       </div>
-      <div className="border-t border-gray-800/70 bg-gray-950/30 px-2 pb-2 pt-1.5">
-        <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0 border-b border-gray-800/60 pb-1.5">
+      <div className="border-t border-[#d0daea] bg-[#f4f7fb] px-2 pb-2 pt-1.5">
+        <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0 border-b border-[#f0f4f9] pb-1.5">
           <span
-            className="h-4 w-0.5 shrink-0 self-center rounded-full bg-red-600/85"
+            className="h-4 w-0.5 shrink-0 self-center rounded-full bg-red-500"
             aria-hidden
           />
-          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-300">
+          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-[#0f2044]">
             Wild card
           </h4>
-          <span className="text-[10px] text-gray-500">WC GB</span>
+          <span className="text-[10px] text-[#7a8fa8]">WC GB</span>
         </div>
-        <div className="overflow-x-auto rounded-md border border-gray-800/70 bg-gray-950/25">
+        <div className="overflow-x-auto rounded-md border border-[#d0daea] bg-white">
           <WildCardStandingsTable rows={wildCardRows} />
         </div>
       </div>
@@ -840,9 +789,9 @@ function LeagueStandingsColumn({
 
 function LoadingPanel() {
   return (
-    <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-gray-800 bg-gray-900/40 p-8">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-red-500 border-t-transparent" />
-      <p className="text-sm text-gray-500">Loading MLB data…</p>
+    <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 rounded-xl border border-[#d0daea] bg-[#f4f7fb] p-8">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1e3a6b] border-t-transparent" />
+      <p className="text-sm text-[#7a8fa8]">Loading MLB data…</p>
     </div>
   );
 }
@@ -909,7 +858,7 @@ export default function HomePage() {
     <div className="-mt-8 space-y-10">
       {error ? (
         <div
-          className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-200"
+          className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
           role="alert"
         >
           {error}
@@ -925,7 +874,7 @@ export default function HomePage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+            <h2 className="flex items-center gap-2 text-lg font-bold text-[#0f2044]">
               <span className="h-1 w-6 rounded-full bg-red-500" />
               Standings
             </h2>

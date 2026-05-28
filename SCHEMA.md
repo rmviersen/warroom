@@ -463,7 +463,8 @@ CREATE TABLE team_fielding_seasons (
 -- Statcast sprint speed / running leaderboard by player and season (2015+).
 -- player_id: MLBAM id, soft reference to players.id (no FK).
 -- Seeded by pipeline/seed_statcast_running.py from Savant sprint speed leaderboard.
--- Consumed by calc_baserunning_season_metrics.py for the sprint-speed component of brWPR.
+-- Consumed by calc_baserunning_season_metrics.py for the 2015-only sprint-speed tier of brWPR.
+-- Also displayed on player profiles (sprint_speed, bolts, hp_to_1b).
 CREATE TABLE statcast_running (
   id               BIGSERIAL PRIMARY KEY,
   player_id        BIGINT        NOT NULL,
@@ -479,6 +480,35 @@ CREATE TABLE statcast_running (
   competitive_runs INTEGER,
   bolt_rate        NUMERIC(7,4),
   updated_at       TIMESTAMPTZ   DEFAULT NOW()
+);
+
+-- Statcast baserunning run values by player and season (2016+).
+-- player_id: MLBAM id, soft reference to players.id (no FK).
+-- Seeded by pipeline/seed_statcast_baserunning_rv.py from Savant baserunning-run-value leaderboard.
+-- runner_runs_tot is the primary brWPR input for 2016+ (Tier 1), replacing the
+-- wSB + sprint-speed-proxy approach. runner_runs_xb captures extra-bases-taken value
+-- (not available from any counting-stat source).
+CREATE TABLE statcast_baserunning_rv (
+  id                          BIGSERIAL PRIMARY KEY,
+  player_id                   BIGINT        NOT NULL,
+  player_name                 TEXT,
+  team                        TEXT,
+  season                      INTEGER       NOT NULL,
+  runner_runs_tot             NUMERIC(8,4),  -- total: SB + extra bases combined
+  runner_runs_xb              NUMERIC(8,4),  -- extra-bases-taken component
+  runner_runs_sbx             NUMERIC(8,4),  -- stolen-base component
+  runner_runs_sb2             NUMERIC(8,4),
+  runner_runs_sb3             NUMERIC(8,4),
+  runner_runs_xb_swipe        NUMERIC(8,4),
+  runner_runs_xb_snipe        NUMERIC(8,4),
+  runner_runs_xb_freeze       NUMERIC(8,4),
+  n_runner_moved              INTEGER,
+  n_runner_moved_xb           INTEGER,
+  n_runner_moved_sbx          INTEGER,
+  sb2_count                   INTEGER,
+  sb3_count                   INTEGER,
+  updated_at                  TIMESTAMPTZ   DEFAULT NOW(),
+  UNIQUE (player_id, season)
 );
 
 -- Park factors by franchise and season (``team_id``: MLBAM id, soft reference to ``teams.id``).
@@ -902,3 +932,48 @@ END $$;
 Season-level totals for players are stored in ``player_batting_seasons``, ``player_pitching_seasons``, and ``player_fielding_seasons``; **per-position batting splits** (when populated) in ``player_position_seasons``; franchise seasons in ``team_batting_seasons``, ``team_pitching_seasons``, ``team_fielding_seasons``. ``player_id`` / ``team_id`` align with MLBAM ids (soft references; no FK required). Run-environment indices live in ``park_factors`` (``team_id``, ``season``): ``runs_factor`` plus optional component factors (``hr_factor``, ``hits_factor``, etc.), with a unique index for upserts and public read RLS matching other reference tables.
 
 Unique indexes support upserts (see DDL above). The player profile API exposes the three player tables as ``historicalBatting``, ``historicalPitching``, and ``historicalFielding`` (newest ``season`` first).
+
+## ``team_position_wpr_season`` (view)
+
+Migration: ``supabase/migrations/20260528120000_create_team_position_wpr_view.sql``.
+
+Read-only view that computes innings-weighted WPR by defensive position for each team-season. Useful for the baseball field position-card display on team pages.
+
+**How it works:** For each player, their fraction of innings at each position is calculated from ``player_fielding_seasons.inn``. That fraction is applied to their ``bwpr``, ``fwpr``, ``brwpr``, and ``wpr`` from ``player_batting_seasons``, then summed across all players for each team-position. The ``P`` slot is handled separately — ``pwpr`` is summed from ``player_pitching_seasons``.
+
+Positions ``DH``, ``PH``, ``PR`` are excluded (not defensive field slots). ``OF`` rows pass through for pre-Statcast data where outfield position is not split.
+
+Columns: ``team_id``, ``season``, ``position``, ``bwpr``, ``fwpr``, ``brwpr``, ``wpr``, ``pwpr``, ``player_count``.
+
+**Consumer:** ``GET /api/teams/[id]/position-wpr?season=YYYY`` — returns all rows for a team-season as ``TeamPositionWprApiResponse``.
+
+---
+
+## ``player_season_wpr_totals`` (view)
+
+Migration: ``supabase/migrations/20260528110000_create_wpr_totals_view.sql``.
+
+Read-only view that provides a unified Total WPR across all player types by FULL OUTER JOINing ``player_batting_seasons`` and ``player_pitching_seasons`` on ``(player_id, season)``. Only rows where at least one WPR component is non-null are included.
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| ``player_id`` | COALESCE(batting, pitching) | MLBAM id |
+| ``player_name`` | COALESCE(batting, pitching) | Display name |
+| ``season`` | COALESCE(batting, pitching) | Season year |
+| ``team_id`` | COALESCE(batting, pitching) | MLBAM team id |
+| ``team`` | COALESCE(batting, pitching) | Team abbreviation |
+| ``bwpr`` | ``player_batting_seasons`` | Batting WPR (null for pure pitchers) |
+| ``fwpr`` | ``player_batting_seasons`` | Fielding WPR (null for pure pitchers) |
+| ``brwpr`` | ``player_batting_seasons`` | Baserunning WPR (null for pure pitchers) |
+| ``wpr`` | ``player_batting_seasons`` | Position-player total = bwpr + fwpr + brwpr |
+| ``pwpr`` | ``player_pitching_seasons`` | Pitching WPR (null for non-pitchers) |
+| ``total_wpr`` | Computed | ``ROUND(COALESCE(wpr, 0) + COALESCE(pwpr, 0), 1)`` |
+
+**Total WPR semantics:**
+- Pure batter: ``total_wpr = wpr``
+- Pure pitcher: ``total_wpr = pwpr``
+- Two-way (e.g. Ohtani): ``total_wpr = wpr + pwpr``
+
+Views inherit the underlying tables' RLS. ``GRANT SELECT … TO anon, authenticated`` ensures PostgREST exposes the view via the anon key. Query via ``supabase.from("player_season_wpr_totals")``.
+
+**Consumer:** ``GET /api/status`` "Total WPR" health check counts rows in this view (replaces the previous ``player_batting_seasons`` + ``wpr IS NOT NULL`` count so pitchers are included).

@@ -3,6 +3,8 @@ import PercentileBar from "@/components/ui/PercentileBar";
 export interface PitcherStatcastSectionProps {
   pitcherPercentiles: Record<string, unknown> | null;
   season: number;
+  showOverall?: boolean;
+  showArsenal?: boolean;
 }
 
 const PITCH_DISPLAY: Record<string, string> = {
@@ -129,6 +131,8 @@ function parsePitchRow(row: unknown): ParsedPitchRow | null {
 export default function PitcherStatcastSection({
   pitcherPercentiles,
   season,
+  showOverall = true,
+  showArsenal = true,
 }: PitcherStatcastSectionProps) {
   if (pitcherPercentiles == null) {
     return (
@@ -219,45 +223,47 @@ export default function PitcherStatcastSection({
         ) : null}
       </div>
 
-      <div className="rounded-xl border border-[#d0daea] bg-white px-4 py-3 space-y-3 mt-3">
-        <PercentileBar
-          label="Stuff+"
-          rawDisplay={fmtStuff(mStuff)}
-          percentile={mStuff.percentile}
-          qualifies={barOverallQual(mStuff.metricQualifies)}
-          isWarroomMetric={true}
-        />
-        <PercentileBar
-          label="FB Velocity"
-          rawDisplay={fmtMph(mFb)}
-          percentile={mFb.percentile}
-          qualifies={barOverallQual(mFb.metricQualifies)}
-          isWarroomMetric={false}
-        />
-        <PercentileBar
-          label="Max Velocity"
-          rawDisplay={fmtMph(mMax)}
-          percentile={mMax.percentile}
-          qualifies={barOverallQual(mMax.metricQualifies)}
-          isWarroomMetric={false}
-        />
-        <PercentileBar
-          label="Whiff Rate"
-          rawDisplay={fmtPctPts(mWhiff)}
-          percentile={mWhiff.percentile}
-          qualifies={barOverallQual(mWhiff.metricQualifies)}
-          isWarroomMetric={false}
-        />
-        <PercentileBar
-          label="Chase Rate"
-          rawDisplay={fmtPctPts(mChase)}
-          percentile={mChase.percentile}
-          qualifies={barOverallQual(mChase.metricQualifies)}
-          isWarroomMetric={false}
-        />
-      </div>
+      {showOverall ? (
+        <div className="rounded-xl border border-[#d0daea] bg-white px-4 py-3 space-y-3 mt-3">
+          <PercentileBar
+            label="Stuff+"
+            rawDisplay={fmtStuff(mStuff)}
+            percentile={mStuff.percentile}
+            qualifies={barOverallQual(mStuff.metricQualifies)}
+            isWarroomMetric={true}
+          />
+          <PercentileBar
+            label="FB Velocity"
+            rawDisplay={fmtMph(mFb)}
+            percentile={mFb.percentile}
+            qualifies={barOverallQual(mFb.metricQualifies)}
+            isWarroomMetric={false}
+          />
+          <PercentileBar
+            label="Max Velocity"
+            rawDisplay={fmtMph(mMax)}
+            percentile={mMax.percentile}
+            qualifies={barOverallQual(mMax.metricQualifies)}
+            isWarroomMetric={false}
+          />
+          <PercentileBar
+            label="Whiff Rate"
+            rawDisplay={fmtPctPts(mWhiff)}
+            percentile={mWhiff.percentile}
+            qualifies={barOverallQual(mWhiff.metricQualifies)}
+            isWarroomMetric={false}
+          />
+          <PercentileBar
+            label="Chase Rate"
+            rawDisplay={fmtPctPts(mChase)}
+            percentile={mChase.percentile}
+            qualifies={barOverallQual(mChase.metricQualifies)}
+            isWarroomMetric={false}
+          />
+        </div>
+      ) : null}
 
-      {arsenalRows.length > 0 ? (
+      {showArsenal && arsenalRows.length > 0 ? (
         <>
           <h4 className="text-sm font-semibold text-[#0f2044] mt-4 mb-2">
             Arsenal

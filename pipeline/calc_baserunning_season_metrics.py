@@ -1,17 +1,25 @@
 """
 Compute baserunning Wins Above Replacement (brWPR) per player batting season.
 
-Two components — both converted to wins via the shared RPW formula:
+Three-tier calculation — all converted to wins via the shared RPW formula:
 
-  wSB (1990+)
-    Stolen-base runs: ``SB × runSB + CS × runCS`` using season-specific
-    linear weights from ``calculations.baserunning_calcs.get_wsb_weights``.
+  Tier 1 — Statcast run value (2016+)
+    ``runner_runs_tot`` from ``statcast_baserunning_rv``: a direct Statcast
+    measurement of runs created via stolen bases AND extra bases taken.
+    This replaces both the wSB and sprint-speed-proxy components for modern
+    seasons, giving a true measure of advancement value rather than a proxy.
+    Falls back to Tier 3 for players absent from the Savant leaderboard
+    (insufficient opportunities).
 
-  Sprint-speed runs (2015+)
-    Sprint speed z-score vs the season league distribution, scaled by the
-    player's competitive-running opportunities relative to league average,
-    then multiplied by ``SPRINT_RUNS_SCALE`` to convert to runs.
-    Requires a populated ``statcast_running`` row for the player-season.
+  Tier 2 — Sprint speed + wSB (2015 only)
+    The Statcast run-value leaderboard starts in 2016, but sprint speed data
+    is available from 2015.  For 2015, wSB (stolen-base linear weights) is
+    combined with a sprint-speed z-score to estimate baserunning value.
+
+  Tier 3 — wSB fallback (1990–2014, and 2016+ players with no Savant row)
+    ``SB × runSB + CS × runCS`` using season-specific linear weights from
+    ``calculations.baserunning_calcs.get_wsb_weights``.  No extra-base
+    advancement component.
 
 Writes ``brwpr`` via ``upsert_player_batting_seasons`` (partial upsert — never
 overwrites ``bwpr``, ``fwpr``, or counting stats).
@@ -37,6 +45,7 @@ from calc_batting_season_metrics import (
     load_league_pitching_ip,
 )
 from calculations.baserunning_calcs import (
+    BASERUNNING_RV_FIRST_SEASON,
     SPRINT_SPEED_FIRST_SEASON,
     calc_baserunning_war,
     calc_sprint_runs,
@@ -88,6 +97,7 @@ def load_statcast_running(client: Any, season: int) -> dict[int, dict[str, Any]]
     """
     Load all ``statcast_running`` rows for ``season``.
     Returns a dict keyed by ``player_id``.
+    Only used for the 2015 sprint-speed tier.
     """
     by_player: dict[int, dict[str, Any]] = {}
     offset = 0
@@ -115,6 +125,44 @@ def load_statcast_running(client: Any, season: int) -> dict[int, dict[str, Any]]
             by_player[pid] = {
                 "sprint_speed":     _to_float(row.get("sprint_speed")),
                 "competitive_runs": _to_float(row.get("competitive_runs")),
+            }
+        if len(rows) < _PAGE_SIZE:
+            break
+        offset += _PAGE_SIZE
+    return by_player
+
+
+def load_baserunning_rv(client: Any, season: int) -> dict[int, dict[str, Any]]:
+    """
+    Load all ``statcast_baserunning_rv`` rows for ``season``.
+    Returns a dict keyed by ``player_id``.
+    Used for the Tier 1 (2016+) calculation path.
+    """
+    by_player: dict[int, dict[str, Any]] = {}
+    offset = 0
+    while True:
+        try:
+            resp = (
+                client.table("statcast_baserunning_rv")
+                .select("player_id,runner_runs_tot")
+                .eq("season", season)
+                .range(offset, offset + _PAGE_SIZE - 1)
+                .execute()
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"calc_baserunning_season_metrics: statcast_baserunning_rv read "
+                f"season={season} offset={offset} failed: {exc}",
+                flush=True,
+            )
+            break
+        rows = resp.data or []
+        for row in rows:
+            pid = _to_int(row.get("player_id"))
+            if pid is None:
+                continue
+            by_player[pid] = {
+                "runner_runs_tot": _to_float(row.get("runner_runs_tot")),
             }
         if len(rows) < _PAGE_SIZE:
             break
@@ -204,14 +252,21 @@ def run_season(client: Any, season: int) -> dict[str, int]:
             flush=True,
         )
 
-    # Load sprint speed data when in Statcast era
+    # -- Tier 1: load Statcast run values (2016+) ----------------------------
+    baserunning_rv_by_player: dict[int, dict[str, Any]] = {}
+    if season >= BASERUNNING_RV_FIRST_SEASON:
+        baserunning_rv_by_player = load_baserunning_rv(client, season)
+        stats["rv_rows"] = len(baserunning_rv_by_player)
+
+    # -- Tier 2: load sprint speed (2015 only) --------------------------------
     running_by_player: dict[int, dict[str, Any]] = {}
-    if season >= SPRINT_SPEED_FIRST_SEASON:
+    if season == SPRINT_SPEED_FIRST_SEASON:
         running_by_player = load_statcast_running(client, season)
         stats["sprint_rows"] = len(running_by_player)
 
     lg_avg_speed, lg_std_speed = build_sprint_league_stats(running_by_player)
 
+    # -- Page through player_batting_seasons ----------------------------------
     payloads: list[dict[str, Any]] = []
     offset = 0
 
@@ -247,10 +302,15 @@ def run_season(client: Any, season: int) -> dict[str, int]:
             sb = _to_float(row.get("sb"))
             cs = _to_float(row.get("cs"))
 
-            wsb_runs = calc_wsb_runs(sb, cs, season)
+            if season >= BASERUNNING_RV_FIRST_SEASON and pid in baserunning_rv_by_player:
+                # ---- Tier 1: Statcast total run value ----
+                br_runs = baserunning_rv_by_player[pid]["runner_runs_tot"]
+                brwpr = calc_baserunning_war(br_runs, None, float(lg_r), float(lg_ip))
+                stats["rv_path"] += 1
 
-            sprint_runs: float | None = None
-            if season >= SPRINT_SPEED_FIRST_SEASON and pid in running_by_player:
+            elif season == SPRINT_SPEED_FIRST_SEASON and pid in running_by_player:
+                # ---- Tier 2: wSB + sprint speed (2015 only) ----
+                wsb_runs = calc_wsb_runs(sb, cs, season)
                 r = running_by_player[pid]
                 sprint_runs = calc_sprint_runs(
                     r["sprint_speed"],
@@ -258,11 +318,15 @@ def run_season(client: Any, season: int) -> dict[str, int]:
                     lg_avg_speed,
                     lg_std_speed,
                 )
+                brwpr = calc_baserunning_war(wsb_runs, sprint_runs, float(lg_r), float(lg_ip))
                 stats["sprint_path"] += 1
+
             else:
+                # ---- Tier 3: wSB only (pre-2015, or no Savant row) ----
+                wsb_runs = calc_wsb_runs(sb, cs, season)
+                brwpr = calc_baserunning_war(wsb_runs, None, float(lg_r), float(lg_ip))
                 stats["wsb_only_path"] += 1
 
-            brwpr = calc_baserunning_war(wsb_runs, sprint_runs, float(lg_r), float(lg_ip))
             if brwpr is None:
                 stats["skipped_no_rpw"] += 1
                 continue
@@ -282,10 +346,16 @@ def run_season(client: Any, season: int) -> dict[str, int]:
     stats["rows_written"] = ok
     stats["rows_failed"]  = fail
 
+    tier_label = (
+        "statcast_rv" if season >= BASERUNNING_RV_FIRST_SEASON
+        else "sprint+wsb" if season == SPRINT_SPEED_FIRST_SEASON
+        else "wsb_only"
+    )
     print(
-        f"calc_baserunning_season_metrics: season={season} "
-        f"batting_rows={stats['batting_rows']} sprint_rows={stats['sprint_rows']} "
-        f"sprint_path={stats['sprint_path']} wsb_only_path={stats['wsb_only_path']} "
+        f"calc_baserunning_season_metrics: season={season} tier={tier_label} "
+        f"batting_rows={stats['batting_rows']} rv_rows={stats['rv_rows']} "
+        f"rv_path={stats['rv_path']} sprint_path={stats['sprint_path']} "
+        f"wsb_only_path={stats['wsb_only_path']} "
         f"rows_written={ok} rows_failed={fail}",
         flush=True,
     )

@@ -11,6 +11,7 @@ function pathnameMatchesHref(pathname: string, href: string): boolean {
   if (href === "/teams") return pathname.startsWith("/teams");
   if (href === "/players") return pathname.startsWith("/players");
   if (href === "/statcast") return pathname.startsWith("/statcast");
+  if (href === "/status") return pathname.startsWith("/status");
   return pathname === href;
 }
 
@@ -66,6 +67,9 @@ function LeaderboardsDropdown() {
             <Link href="/leaderboards/batting" className={subCls("/leaderboards/batting")}>
               Batting
             </Link>
+            <Link href="/leaderboards/baserunning" className={subCls("/leaderboards/baserunning")}>
+              Baserunning
+            </Link>
             <Link href="/leaderboards/pitching" className={subCls("/leaderboards/pitching")}>
               Pitching
             </Link>
@@ -96,6 +100,7 @@ export default function Navbar() {
             <NavItem href="/players" label="Players" />
             <LeaderboardsDropdown />
             <NavItem href="/statcast" label="Statcast" />
+            <NavItem href="/status" label="Status" />
           </div>
         </div>
       </div>

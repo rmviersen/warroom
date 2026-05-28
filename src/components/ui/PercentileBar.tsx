@@ -59,27 +59,30 @@ export default function PercentileBar({
       ? "text-[#7a8fa8]"
       : percentileTextClasses(p, isWarroomMetric, qualifies);
 
+  const ordinal =
+    p == null ? "—" : `${getOrdinal(Math.round(p))}${qualifies ? "" : "*"}`;
+
   return (
-    <div className="flex w-full max-w-full items-center gap-2">
-      <div className="w-[40%] min-w-0 shrink-0">
+    <div className="grid w-full min-w-0 grid-cols-[minmax(0,5.25rem)_1fr_2.25rem] items-center gap-x-1.5">
+      <div className="min-w-0">
         <div
-          className={`text-xs font-medium ${
+          className={`truncate text-[10px] font-medium leading-tight ${
             isWarroomMetric ? "text-[#b8922a]" : "text-[#7a8fa8]"
           }`}
         >
           {label}
         </div>
-        <div className="text-[10px] font-mono tabular-nums text-[#1e3050]">
+        <div className="truncate text-[10px] font-mono tabular-nums leading-tight text-[#1e3050]">
           {rawDisplay}
         </div>
       </div>
 
-      <div className="w-[45%] min-w-0 shrink-0 self-center px-1">
+      <div className="min-w-0 self-center">
         <div
           className={[
-            "relative box-border h-[6px] w-full rounded-[3px] bg-[#f0f4f9]",
+            "relative box-border h-[5px] w-full rounded-[2px] bg-[#f0f4f9]",
             !qualifies
-              ? "border-[1.5px] border-dashed border-[#d0daea]"
+              ? "border border-dashed border-[#d0daea]"
               : "",
           ]
             .filter(Boolean)
@@ -88,7 +91,7 @@ export default function PercentileBar({
           {p != null ? (
             <div
               className={[
-                "absolute inset-y-0 left-0 rounded-[3px]",
+                "absolute inset-y-0 left-0 rounded-[2px]",
                 fillCls,
                 qualifies ? "" : "opacity-50",
               ]
@@ -102,16 +105,10 @@ export default function PercentileBar({
       </div>
 
       <div
-        className={[
-          "w-[15%] min-w-0 shrink-0 text-right font-mono text-xs tabular-nums",
-          textCls,
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        className={`shrink-0 text-right font-mono text-[10px] tabular-nums leading-none ${textCls}`}
+        title={ordinal}
       >
-        {p == null
-          ? "—"
-          : `${getOrdinal(Math.round(p))}${qualifies ? "" : "*"}`}
+        {ordinal}
       </div>
     </div>
   );

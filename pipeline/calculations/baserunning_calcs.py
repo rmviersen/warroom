@@ -5,6 +5,15 @@ from __future__ import annotations
 SPRINT_SPEED_FIRST_SEASON = 2015
 """First season with Savant sprint speed data."""
 
+BASERUNNING_RV_FIRST_SEASON = 2016
+"""
+First season with Savant baserunning run-value data (``runner_runs_tot``).
+
+From 2016 onward, ``calc_baserunning_season_metrics`` uses ``runner_runs_tot``
+directly as the run input to brWPR, replacing the wSB + sprint-speed-proxy
+approach.  2015 continues to use wSB + sprint speed.  Pre-2015 uses wSB only.
+"""
+
 SPRINT_RUNS_SCALE = 1.5
 """
 Estimated baserunning runs per unit of sprint-speed z-score for a full-season player
@@ -92,7 +101,7 @@ def calc_sprint_runs(
 
 
 def calc_baserunning_war(
-    wsb_runs: float | None,
+    br_runs: float | None,
     sprint_runs: float | None,
     lg_r: float,
     lg_ip: float,
@@ -100,21 +109,32 @@ def calc_baserunning_war(
     """
     Baserunning wins above replacement (brWPR).
 
-    Sums wSB and sprint-speed run components (either may be ``None`` / absent)
-    and divides by ``RPW = 9 × (lgR / lgIP) × 1.5 + 3``, matching the RPW
-    convention used by ``calc_batting_war``, ``calc_pitching_war``, and
+    Sums the primary baserunning run component (``br_runs``) and the
+    sprint-speed run component (either may be ``None`` / absent), then
+    divides by ``RPW = 9 × (lgR / lgIP) × 1.5 + 3``.
+
+    ``br_runs`` meaning by era:
+
+    * **2016+** — pass ``runner_runs_tot`` from ``statcast_baserunning_rv``
+      (Statcast total: SB value + extra-bases-taken value).  Pass
+      ``sprint_runs=None``; the XB component is already embedded.
+    * **2015** — pass ``wsb_runs`` (stolen-base linear weights) as ``br_runs``
+      and the sprint-speed z-score result as ``sprint_runs``.
+    * **1990–2014** — pass ``wsb_runs`` as ``br_runs``, ``sprint_runs=None``.
+
+    RPW convention matches ``calc_batting_war``, ``calc_pitching_war``, and
     ``calc_fielding_season_metrics``.
 
     Returns ``None`` when both run components are absent or RPW is unavailable.
     """
-    if wsb_runs is None and sprint_runs is None:
+    if br_runs is None and sprint_runs is None:
         return None
     if lg_ip <= 0:
         return None
     rpw = 9.0 * (lg_r / lg_ip) * 1.5 + 3.0
     if rpw == 0:
         return None
-    total_runs = (wsb_runs or 0.0) + (sprint_runs or 0.0)
+    total_runs = (br_runs or 0.0) + (sprint_runs or 0.0)
     return float(round(total_runs / rpw, 1))
 
 
@@ -122,6 +142,7 @@ __all__ = [
     "SPRINT_SPEED_FIRST_SEASON",
     "SPRINT_RUNS_SCALE",
     "FULL_SEASON_COMPETITIVE_RUNS",
+    "BASERUNNING_RV_FIRST_SEASON",
     "calc_baserunning_war",
     "calc_sprint_runs",
     "calc_wsb_runs",

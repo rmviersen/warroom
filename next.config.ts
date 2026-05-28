@@ -8,6 +8,11 @@ const nextConfig: NextConfig = {
         hostname: "www.mlbstatic.com",
         pathname: "/team-logos/**",
       },
+      {
+        protocol: "https",
+        hostname: "img.mlb.com",
+        pathname: "/headshots/**",
+      },
     ],
     dangerouslyAllowSVG: true,
     contentDispositionType: "attachment",

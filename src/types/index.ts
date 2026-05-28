@@ -240,10 +240,43 @@ export interface Team {
 /** Team hitting line for GET /api/teams/[id] (season totals). */
 export interface TeamSeasonHittingSummary {
   avg: string | null;
+  slg: string | null;
   ops: string | null;
   homeRuns: number | null;
   rbi: number | null;
   runs: number | null;
+}
+
+/** One stat value plus MLB-wide rank for the teams overview grid. */
+export interface TeamOverviewStat {
+  value: string | null;
+  rank: number | null;
+}
+
+/** Compact team card payload for GET /api/teams. */
+export interface TeamOverview {
+  id: number;
+  name: string | null;
+  abbreviation: string | null;
+  division: string | null;
+  league: string | null;
+  league_id: number | null;
+  wins: number;
+  losses: number;
+  /** Division leader or on the right side of the WC cutoff (+ / - / 0 WC GB). */
+  playoff_position: boolean;
+  pitching: {
+    era: TeamOverviewStat;
+    whip: TeamOverviewStat;
+    runsAllowed: TeamOverviewStat;
+  };
+  hitting: {
+    avg: TeamOverviewStat;
+    slg: TeamOverviewStat;
+    ops: TeamOverviewStat;
+    homeRuns: TeamOverviewStat;
+    runsScored: TeamOverviewStat;
+  };
 }
 
 /** Team pitching line for GET /api/teams/[id] (season totals). */
@@ -285,6 +318,30 @@ export interface TeamRosterPlayer {
 }
 
 /** GET /api/teams/[id] JSON body. */
+export type TeamDiamondPosition =
+  | "C"
+  | "1B"
+  | "2B"
+  | "3B"
+  | "SS"
+  | "LF"
+  | "CF"
+  | "RF";
+
+/** bWPR / fWPR / brWPR rollup for one defensive spot on the team diamond. */
+export interface TeamPositionWprSummary {
+  bwpr: number | null;
+  fwpr: number | null;
+  brwpr: number | null;
+}
+
+/** Team-level WPR by position for the diamond visual (populated when pipeline ships). */
+export interface TeamWprDiamondData {
+  season: number;
+  positions: Partial<Record<TeamDiamondPosition, TeamPositionWprSummary>>;
+  pitching: { pwpr: number | null };
+}
+
 export interface TeamDetailApiResponse {
   team: Record<string, unknown>;
   roster: TeamRosterPlayer[];
@@ -463,4 +520,102 @@ export interface StatcastPitch {
   home_team: string | null;
   away_team: string | null;
   created_at?: string | null;
+}
+
+// =============================================================================
+// Team position WPR
+// =============================================================================
+
+/** One row from GET /api/teams/[id]/position-wpr (team_position_wpr_ranked view). */
+export interface TeamPositionWprRow {
+  /** Defensive position code: P | C | 1B | 2B | 3B | SS | LF | CF | RF | OF */
+  position: string;
+  /** Innings-weighted sum of player bWPR at this position. Null for P slot. */
+  bwpr: number | null;
+  /** Innings-weighted sum of player fWPR at this position. Null for P slot. */
+  fwpr: number | null;
+  /** Innings-weighted sum of player brWPR at this position. Null for P slot. */
+  brwpr: number | null;
+  /** Innings-weighted sum of player wpr (bwpr+fwpr+brwpr). Null for P slot. */
+  wpr: number | null;
+  /** Sum of pwpr for all pitchers on this team-season. Non-null for P slot only. */
+  pwpr: number | null;
+  /** Number of distinct players contributing to this position. */
+  player_count: number;
+  /** MLB rank for bwpr at this position (1 = best). Null for P slot. */
+  bwpr_rank?: number | null;
+  /** MLB rank for fwpr at this position. Null for P slot. */
+  fwpr_rank?: number | null;
+  /** MLB rank for brwpr at this position. Null for P slot. */
+  brwpr_rank?: number | null;
+  /** MLB rank for wpr at this position. Null for P slot. */
+  wpr_rank?: number | null;
+  /** MLB rank for pwpr at this position. Non-null for P slot only. */
+  pwpr_rank?: number | null;
+  /** Number of teams with data at this position (denominator for rank display). */
+  team_count?: number | null;
+}
+
+/** One player row from GET /api/teams/[id]/position-wpr/players. */
+export interface TeamPositionWprPlayerRow {
+  /** Defensive position this row is attributed to. */
+  position: string;
+  player_id: number;
+  player_name: string | null;
+  /** Innings at this position (IP for pitchers). */
+  inn: number | null;
+  /** Fraction of this player's total innings spent at this position (0–1). */
+  inn_share: number | null;
+  /** player.bwpr × inn_share. Null for P slot. */
+  bwpr_attr: number | null;
+  /** player.fwpr × inn_share. Null for P slot. */
+  fwpr_attr: number | null;
+  /** player.brwpr × inn_share. Null for P slot. */
+  brwpr_attr: number | null;
+  /** player.wpr × inn_share. Null for P slot. */
+  wpr_attr: number | null;
+  /** pitcher's season pwpr (un-weighted — already their individual contribution). Non-null for P only. */
+  pwpr_attr: number | null;
+}
+
+/** GET /api/teams/[id]/position-wpr/players JSON body. */
+export interface TeamPositionWprPlayersApiResponse {
+  players: TeamPositionWprPlayerRow[];
+  season: number;
+}
+
+/** GET /api/teams/[id]/position-wpr JSON body. */
+export interface TeamPositionWprApiResponse {
+  positions: TeamPositionWprRow[];
+  season: number;
+}
+
+// =============================================================================
+// Pipeline status / RAG tracker
+// =============================================================================
+
+/** Red / Amber / Green freshness indicator. */
+export type RagStatus = "green" | "amber" | "red";
+
+/** Logical grouping for status checks. */
+export type StatusCategory = "pitch_ingest" | "season_seeds" | "wpr_health";
+
+/** One data-source health check returned by GET /api/status. */
+export interface StatusCheck {
+  id: string;
+  label: string;
+  status: RagStatus;
+  /** Human-readable detail: date string, row count, or error text. */
+  detail: string;
+  category: StatusCategory;
+}
+
+/** GET /api/status JSON body. */
+export interface StatusApiResponse {
+  checks: StatusCheck[];
+  /** Season the season-scoped checks are evaluated against. */
+  season: number;
+  /** ISO timestamp when the response was generated. */
+  generatedAt: string;
+  summary: { green: number; amber: number; red: number };
 }

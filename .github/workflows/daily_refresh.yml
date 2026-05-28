@@ -73,18 +73,37 @@ jobs:
         run: python seed_player_pitching_seasons.py --season $SEASON
         continue-on-error: true
 
+      - name: Seed player fielding seasons
+        run: python seed_player_fielding_seasons.py --season $SEASON
+        continue-on-error: true
+
+      - name: Seed Statcast OAA (fielding)
+        run: python seed_statcast_oaa.py --start-season $SEASON --end-season $SEASON
+        continue-on-error: true
+
       - name: Calculate batting season metrics
         run: python calc_batting_season_metrics.py --start-season $SEASON --end-season $SEASON
 
       - name: Calculate pitching season metrics
         run: python calc_pitching_season_metrics.py --start-season $SEASON --end-season $SEASON
 
+      - name: Calculate fielding season metrics
+        run: python calc_fielding_season_metrics.py --start-season $SEASON --end-season $SEASON
+        continue-on-error: true
+
       - name: Seed Statcast running (sprint speed)
         run: python seed_statcast_running.py --start-season $SEASON --end-season $SEASON
         continue-on-error: true
 
+      - name: Seed Statcast baserunning run values
+        run: python seed_statcast_baserunning_rv.py --start-season $SEASON --end-season $SEASON
+        continue-on-error: true
+
       - name: Calculate baserunning season metrics
         run: python calc_baserunning_season_metrics.py --start-season $SEASON --end-season $SEASON
+
+      - name: Calculate total WPR
+        run: python calc_wpr_season_metrics.py --start-season $SEASON --end-season $SEASON
 
       - name: Check if Monday
         id: day_check
@@ -98,6 +117,10 @@ jobs:
       - name: Recalculate league averages
         if: ${{ steps.day_check.outputs.is_monday == 'true' || github.event_name == 'workflow_dispatch' }}
         run: python calc_league_averages.py --start-season $SEASON --end-season $SEASON
+
+      - name: Recalculate league pitch type averages
+        if: ${{ steps.day_check.outputs.is_monday == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: python calc_league_pitch_type_averages.py --start-season $SEASON --end-season $SEASON
 
       - name: Completion summary
         if: always()
