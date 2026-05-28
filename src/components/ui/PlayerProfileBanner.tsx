@@ -74,25 +74,25 @@ export default function PlayerProfileBanner({
 
   return (
     <div className="rounded-xl border border-[#d0daea] bg-[#f4f7fb] overflow-hidden">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 sm:p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3">
         {!hidePhoto ? (
-          <span className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border-2 border-[#d0daea] bg-white">
+          <span className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-[#d0daea] bg-white">
             <Image
               src={getPlayerHeadshotUrl(playerId)}
               alt=""
               fill
               className="object-cover object-top"
-              sizes="80px"
+              sizes="64px"
               onError={() => setHidePhoto(true)}
             />
           </span>
         ) : (
-          <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-2 border-[#d0daea] bg-white text-lg font-bold text-[#7a8fa8]">
+          <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-[#d0daea] bg-white text-base font-bold text-[#7a8fa8]">
             {fullName.charAt(0)}
           </span>
         )}
 
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="min-w-0 flex-1 space-y-1.5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-[#7a8fa8]">
               {team}

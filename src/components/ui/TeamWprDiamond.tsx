@@ -8,20 +8,29 @@ import type {
   TeamWprDiamondData,
 } from "@/types";
 
-/**
- * Anchor points in the same 0–100 coordinate space as the field SVG.
- * Diamond: home (50,90) · 1B (92,52) · 2B (50,14) · 3B (8,52) · mound (50,52).
- */
+/** Shared field geometry (viewBox 0 0 100 100). Foul lines are 45° from home. */
+const FIELD = {
+  home: { x: 50, y: 92 },
+  first: { x: 88, y: 54 },
+  second: { x: 50, y: 16 },
+  third: { x: 12, y: 54 },
+  mound: { x: 50, y: 54 },
+  /** Left/right foul poles — on 45° lines from home, y = 92 - (50 - x). */
+  lfPole: { x: 8, y: 50 },
+  rfPole: { x: 92, y: 50 },
+  cfWall: { x: 50, y: 12 },
+} as const;
+
 const POSITION_ANCHORS: Record<TeamDiamondPosition | "P", { x: number; y: number }> = {
-  LF: { x: 20, y: 22 },
-  CF: { x: 50, y: 9 },
-  RF: { x: 80, y: 22 },
-  SS: { x: 28, y: 40 },
-  "2B": { x: 72, y: 40 },
-  "3B": { x: 16, y: 62 },
-  "1B": { x: 84, y: 62 },
-  C: { x: 50, y: 92 },
-  P: { x: 50, y: 52 },
+  LF: { x: 22, y: 30 },
+  CF: { x: 50, y: 22 },
+  RF: { x: 78, y: 30 },
+  SS: { x: 26, y: 42 },
+  "2B": { x: 74, y: 42 },
+  "3B": { x: 18, y: 60 },
+  "1B": { x: 82, y: 60 },
+  C: { x: 50, y: 94 },
+  P: { x: FIELD.mound.x, y: FIELD.mound.y },
 };
 
 const FIELD_POSITIONS: TeamDiamondPosition[] = [
@@ -73,8 +82,8 @@ function WprMetricRow({
   value: number | null | undefined;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 leading-none">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-[#7a8fa8]">
+    <div className="flex items-center justify-between gap-4 leading-none">
+      <span className="text-xs font-medium uppercase tracking-wide text-[#7a8fa8]">
         {label}
       </span>
       <span className="font-mono text-sm tabular-nums font-bold text-[#b8922a]">
@@ -92,9 +101,9 @@ function PositionWprCard({
   summary: TeamPositionWprSummary | null | undefined;
 }) {
   return (
-    <div className="w-[8.5rem] rounded-lg border border-[#d0daea] bg-white px-3 py-2.5 shadow-md sm:w-[9rem]">
-      <p className="text-xs font-bold tracking-wide text-[#0f2044]">{position}</p>
-      <div className="mt-2.5 space-y-2">
+    <div className="w-[9.5rem] rounded-xl border border-[#d0daea] bg-white px-3.5 py-3 shadow-lg sm:w-[10.25rem] lg:w-[10.75rem]">
+      <p className="text-sm font-bold tracking-wide text-[#0f2044]">{position}</p>
+      <div className="mt-3 space-y-2.5">
         <WprMetricRow label="bWPR" value={summary?.bwpr} />
         <WprMetricRow label="fWPR" value={summary?.fwpr} />
         <WprMetricRow label="brWPR" value={summary?.brwpr} />
@@ -109,15 +118,15 @@ function PitchingWprBox({
   pwpr: number | null | undefined;
 }) {
   return (
-    <div className="w-[8.5rem] rounded-lg border-2 border-[#1e3a6b]/25 bg-white px-3 py-3 shadow-md sm:w-[9rem]">
-      <p className="text-xs font-bold uppercase tracking-wide text-[#1e3a6b]">
+    <div className="w-[9.5rem] rounded-xl border-2 border-[#1e3a6b]/20 bg-white px-3.5 py-3.5 shadow-lg sm:w-[10.25rem] lg:w-[10.75rem]">
+      <p className="text-sm font-bold uppercase tracking-wide text-[#1e3a6b]">
         Pitching
       </p>
-      <div className="mt-2.5 flex items-center justify-between gap-3">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[#7a8fa8]">
+      <div className="mt-3 flex items-center justify-between gap-4">
+        <span className="text-xs font-medium uppercase tracking-wide text-[#7a8fa8]">
           pWPR
         </span>
-        <span className="font-mono text-base tabular-nums font-bold text-[#b8922a]">
+        <span className="font-mono text-lg tabular-nums font-bold text-[#b8922a]">
           {formatWpr(pwpr)}
         </span>
       </div>
@@ -126,133 +135,91 @@ function PitchingWprBox({
 }
 
 function FieldDiamondGraphic({ idPrefix }: { idPrefix: string }) {
-  const outfieldGrad = `${idPrefix}-outfield`;
-  const infieldGrad = `${idPrefix}-infield`;
-  const wallGrad = `${idPrefix}-wall`;
-
-  const home = { x: 50, y: 90 };
-  const first = { x: 92, y: 52 };
-  const second = { x: 50, y: 14 };
-  const third = { x: 8, y: 52 };
-  const mound = { x: 50, y: 52 };
-
-  const lfWall = { x: 6, y: 10 };
-  const cfWall = { x: 50, y: 3 };
-  const rfWall = { x: 94, y: 10 };
+  const outfieldFill = `${idPrefix}-outfield`;
+  const { home, first, second, third, mound, lfPole, rfPole, cfWall } = FIELD;
 
   const outfieldPath = `
     M ${home.x} ${home.y}
-    L ${third.x} ${third.y}
-    L ${lfWall.x} ${lfWall.y}
-    Q ${cfWall.x} ${cfWall.y} ${rfWall.x} ${rfWall.y}
-    L ${first.x} ${first.y}
+    L ${lfPole.x} ${lfPole.y}
+    Q ${cfWall.x} ${cfWall.y} ${rfPole.x} ${rfPole.y}
     Z
   `;
 
   const wallPath = `
-    M ${lfWall.x} ${lfWall.y}
-    Q ${cfWall.x} ${cfWall.y} ${rfWall.x} ${rfWall.y}
+    M ${lfPole.x} ${lfPole.y}
+    Q ${cfWall.x} ${cfWall.y} ${rfPole.x} ${rfPole.y}
   `;
+
+  const leftFoul = `M ${home.x} ${home.y} L ${lfPole.x} ${lfPole.y}`;
+  const rightFoul = `M ${home.x} ${home.y} L ${rfPole.x} ${rfPole.y}`;
+  const infieldPath = `
+    M ${home.x} ${home.y}
+    L ${first.x} ${first.y}
+    L ${second.x} ${second.y}
+    L ${third.x} ${third.y}
+    Z
+  `;
+
+  const line = {
+    stroke: "#c5d3e3",
+    strokeWidth: 0.4,
+    fill: "none" as const,
+  };
 
   return (
     <svg
-      className="pointer-events-none absolute inset-0 h-full w-full"
+      className="pointer-events-none absolute inset-0 h-full w-full opacity-90"
       viewBox="0 0 100 100"
       preserveAspectRatio="xMidYMid meet"
       aria-hidden
     >
       <defs>
-        <linearGradient id={outfieldGrad} x1="0.5" y1="0" x2="0.5" y2="1">
-          <stop offset="0%" stopColor="#e8f2ea" />
-          <stop offset="55%" stopColor="#dce8df" />
-          <stop offset="100%" stopColor="#d4e3d8" />
-        </linearGradient>
-        <linearGradient id={infieldGrad} x1="0.5" y1="0" x2="0.5" y2="1">
-          <stop offset="0%" stopColor="#fafcfd" />
-          <stop offset="100%" stopColor="#eef3f8" />
-        </linearGradient>
-        <linearGradient id={wallGrad} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#1e3a6b" />
-          <stop offset="100%" stopColor="#152a52" />
+        <linearGradient id={outfieldFill} x1="0.5" y1="0" x2="0.5" y2="1">
+          <stop offset="0%" stopColor="#eef4f0" />
+          <stop offset="100%" stopColor="#f4f7fb" />
         </linearGradient>
       </defs>
 
-      {/* Outfield grass */}
-      <path d={outfieldPath} fill={`url(#${outfieldGrad})`} />
+      <path d={outfieldPath} fill={`url(#${outfieldFill})`} stroke="none" />
 
-      {/* Foul lines */}
-      <path
-        d={`M ${home.x} ${home.y} L ${third.x} ${third.y} L ${lfWall.x} ${lfWall.y}`}
-        fill="none"
-        stroke="#ffffff"
-        strokeWidth="0.65"
-        opacity="0.85"
-      />
-      <path
-        d={`M ${home.x} ${home.y} L ${first.x} ${first.y} L ${rfWall.x} ${rfWall.y}`}
-        fill="none"
-        stroke="#ffffff"
-        strokeWidth="0.65"
-        opacity="0.85"
-      />
+      <path d={leftFoul} {...line} />
+      <path d={rightFoul} {...line} />
 
-      {/* Outfield wall — pad + cap */}
       <path
         d={wallPath}
         fill="none"
-        stroke={`url(#${wallGrad})`}
-        strokeWidth="3.2"
+        stroke="#1e3a6b"
+        strokeWidth={0.45}
         strokeLinecap="round"
-      />
-      <path
-        d={wallPath}
-        fill="none"
-        stroke="#2a4470"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        transform="translate(0, -1.2)"
+        opacity={0.55}
       />
 
-      {/* Warning track arc */}
       <path
-        d={wallPath}
-        fill="none"
-        stroke="#c8d4ca"
-        strokeWidth="0.8"
-        strokeDasharray="2 1.5"
-        transform="translate(0, 5)"
-      />
-
-      {/* Infield diamond */}
-      <path
-        d={`M ${home.x} ${home.y} L ${first.x} ${first.y} L ${second.x} ${second.y} L ${third.x} ${third.y} Z`}
-        fill={`url(#${infieldGrad})`}
-        stroke="#b8c8d8"
-        strokeWidth="0.9"
+        d={infieldPath}
+        fill="#ffffff"
+        stroke="#c5d3e3"
+        strokeWidth={0.4}
         strokeLinejoin="round"
       />
 
-      {/* Base paths */}
-      <circle cx={first.x} cy={first.y} r="1.3" fill="#d0daea" />
-      <circle cx={second.x} cy={second.y} r="1.3" fill="#d0daea" />
-      <circle cx={third.x} cy={third.y} r="1.3" fill="#d0daea" />
+      <circle cx={first.x} cy={first.y} r={0.75} fill="#d0daea" />
+      <circle cx={second.x} cy={second.y} r={0.75} fill="#d0daea" />
+      <circle cx={third.x} cy={third.y} r={0.75} fill="#d0daea" />
 
-      {/* Mound */}
       <circle
         cx={mound.x}
         cy={mound.y}
-        r="4.8"
-        fill="#eef3f8"
-        stroke="#b8c8d8"
-        strokeWidth="0.8"
+        r={3.2}
+        fill="#f4f7fb"
+        stroke="#c5d3e3"
+        strokeWidth={0.35}
       />
 
-      {/* Home plate */}
       <path
-        d={`M ${home.x} ${home.y} L ${home.x - 2.5} ${home.y + 3.5} L ${home.x} ${home.y + 6} L ${home.x + 2.5} ${home.y + 3.5} Z`}
+        d={`M ${home.x} ${home.y} L ${home.x - 1.8} ${home.y + 2.4} L ${home.x} ${home.y + 4.2} L ${home.x + 1.8} ${home.y + 2.4} Z`}
         fill="#ffffff"
-        stroke="#b8c8d8"
-        strokeWidth="0.8"
+        stroke="#c5d3e3"
+        strokeWidth={0.35}
         strokeLinejoin="round"
       />
     </svg>
@@ -281,8 +248,8 @@ export default function TeamWprDiamond({
         </p>
       </div>
 
-      <div className="bg-[#f4f7fb]/30 px-3 py-4 sm:px-5 sm:py-5">
-        <div className="relative mx-auto aspect-[5/6] w-full max-w-3xl min-h-[28rem] sm:min-h-[32rem] lg:max-w-4xl lg:min-h-[36rem]">
+      <div className="px-2 py-3 sm:px-4 sm:py-4">
+        <div className="relative mx-auto aspect-[5/6] w-full max-w-4xl min-h-[30rem] lg:max-w-5xl lg:min-h-[34rem]">
           <FieldDiamondGraphic idPrefix={svgId} />
 
           {FIELD_POSITIONS.map((pos) => {

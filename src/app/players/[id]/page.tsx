@@ -67,7 +67,7 @@ function DatabaseBioPanel({ row }: { row: PlayerRow }) {
 
   return (
     <div className="rounded-xl border border-[#d0daea] bg-[#f4f7fb] overflow-hidden">
-      <div className="px-4 py-3 border-b border-[#d0daea] bg-[#f4f7fb]">
+      <div className="px-3 py-2 border-b border-[#d0daea] bg-[#f4f7fb]">
         <h2 className="text-sm font-semibold text-[#0f2044]">Bio · database</h2>
         <p className="text-xs text-[#7a8fa8] mt-0.5">
           From your Supabase players row (historical / roster cache).
@@ -79,11 +79,11 @@ function DatabaseBioPanel({ row }: { row: PlayerRow }) {
             <tr key={r.label}>
               <th
                 scope="row"
-                className="py-3 px-4 text-left font-medium text-[#7a8fa8] w-2/5"
+                className="py-1.5 px-2 text-left font-medium text-[#7a8fa8] w-2/5"
               >
                 {r.label}
               </th>
-              <td className="py-3 px-4 text-right font-mono tabular-nums text-[#1e3050]">
+              <td className="py-1.5 px-2 text-right font-mono tabular-nums text-[#1e3050]">
                 {r.value}
               </td>
             </tr>
@@ -113,7 +113,7 @@ function HistoricalSeasonsSection({
   }
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-3">
       <div>
         <h2 className="text-sm font-semibold text-[#0f2044]">
           Historical seasons · database
@@ -125,23 +125,23 @@ function HistoricalSeasonsSection({
 
       {batting.length > 0 ? (
         <div className="rounded-xl border border-[#d0daea] bg-white overflow-hidden">
-          <div className="px-4 py-2 border-b border-[#d0daea] bg-[#f4f7fb] text-xs font-semibold text-[#0f2044]">
+          <div className="px-3 py-1.5 border-b border-[#d0daea] bg-[#f4f7fb] text-xs font-semibold text-[#0f2044]">
             Batting
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[640px]">
               <thead>
                 <tr className="text-left text-[#7a8fa8] bg-[#f4f7fb] border-b border-[#f0f4f9]">
-                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Year</th>
-                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Team</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">PA</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">AVG</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">OBP</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">SLG</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">OPS</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">HR</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">wRC+</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-semibold text-[#b8922a]">bWPR</th>
+                  <th className="py-1.5 px-2 font-medium text-[#7a8fa8]">Year</th>
+                  <th className="py-1.5 px-2 font-medium text-[#7a8fa8]">Team</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">PA</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">AVG</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">OBP</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">SLG</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">OPS</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">HR</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">wRC+</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-semibold text-[#b8922a]">bWPR</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f0f4f9] text-[#1e3050]">
@@ -150,32 +150,32 @@ function HistoricalSeasonsSection({
                     key={`${r.id}-bat`}
                     className="bg-white hover:bg-[#f4f7fb] transition-colors"
                   >
-                    <td className="py-2 px-3 font-mono tabular-nums">{r.season}</td>
-                    <td className="py-2 px-3 max-w-[140px] truncate text-[#7a8fa8]">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">{r.season}</td>
+                    <td className="py-1.5 px-2 max-w-[140px] truncate text-[#7a8fa8]">
                       {r.team ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {r.pa ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.avg, 3)}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.obp, 3)}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.slg, 3)}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.ops, 3)}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {r.hr ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {r.wrc_plus ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.bwpr, 1)}
                     </td>
                   </tr>
@@ -188,22 +188,22 @@ function HistoricalSeasonsSection({
 
       {pitching.length > 0 ? (
         <div className="rounded-xl border border-[#d0daea] bg-white overflow-hidden">
-          <div className="px-4 py-2 border-b border-[#d0daea] bg-[#f4f7fb] text-xs font-semibold text-[#0f2044]">
+          <div className="px-3 py-1.5 border-b border-[#d0daea] bg-[#f4f7fb] text-xs font-semibold text-[#0f2044]">
             Pitching
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[600px]">
               <thead>
                 <tr className="text-left text-[#7a8fa8] bg-[#f4f7fb] border-b border-[#f0f4f9]">
-                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Year</th>
-                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Team</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">IP</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">ERA</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">WHIP</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">SO</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">BB</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">FIP</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-semibold text-[#b8922a]">pWPR</th>
+                  <th className="py-1.5 px-2 font-medium text-[#7a8fa8]">Year</th>
+                  <th className="py-1.5 px-2 font-medium text-[#7a8fa8]">Team</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">IP</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">ERA</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">WHIP</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">SO</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">BB</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">FIP</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-semibold text-[#b8922a]">pWPR</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f0f4f9] text-[#1e3050]">
@@ -212,29 +212,29 @@ function HistoricalSeasonsSection({
                     key={`${r.id}-pit`}
                     className="bg-white hover:bg-[#f4f7fb] transition-colors"
                   >
-                    <td className="py-2 px-3 font-mono tabular-nums">{r.season}</td>
-                    <td className="py-2 px-3 max-w-[140px] truncate text-[#7a8fa8]">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">{r.season}</td>
+                    <td className="py-1.5 px-2 max-w-[140px] truncate text-[#7a8fa8]">
                       {r.team ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.ip, 1)}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.era, 2)}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.whip, 3)}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {r.so ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {r.bb ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.fip, 2)}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.pwpr, 1)}
                     </td>
                   </tr>
@@ -247,19 +247,19 @@ function HistoricalSeasonsSection({
 
       {fielding.length > 0 ? (
         <div className="rounded-xl border border-[#d0daea] bg-white overflow-hidden">
-          <div className="px-4 py-2 border-b border-[#d0daea] bg-[#f4f7fb] text-xs font-semibold text-[#0f2044]">
+          <div className="px-3 py-1.5 border-b border-[#d0daea] bg-[#f4f7fb] text-xs font-semibold text-[#0f2044]">
             Fielding
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[520px]">
               <thead>
                 <tr className="text-left text-[#7a8fa8] bg-[#f4f7fb] border-b border-[#f0f4f9]">
-                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Year</th>
-                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Team</th>
-                  <th className="py-2 px-3 font-medium text-[#7a8fa8]">Pos</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">Inn</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">DRS</th>
-                  <th className="py-2 px-3 font-mono tabular-nums font-medium text-[#7a8fa8]">OAA</th>
+                  <th className="py-1.5 px-2 font-medium text-[#7a8fa8]">Year</th>
+                  <th className="py-1.5 px-2 font-medium text-[#7a8fa8]">Team</th>
+                  <th className="py-1.5 px-2 font-medium text-[#7a8fa8]">Pos</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">Inn</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">DRS</th>
+                  <th className="py-1.5 px-2 font-mono tabular-nums font-medium text-[#7a8fa8]">OAA</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f0f4f9] text-[#1e3050]">
@@ -268,20 +268,20 @@ function HistoricalSeasonsSection({
                     key={`${r.id}-fld`}
                     className="bg-white hover:bg-[#f4f7fb] transition-colors"
                   >
-                    <td className="py-2 px-3 font-mono tabular-nums">{r.season}</td>
-                    <td className="py-2 px-3 max-w-[140px] truncate text-[#7a8fa8]">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">{r.season}</td>
+                    <td className="py-1.5 px-2 max-w-[140px] truncate text-[#7a8fa8]">
                       {r.team ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono text-[#7a8fa8]">
+                    <td className="py-1.5 px-2 font-mono text-[#7a8fa8]">
                       {r.position ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {fmtSlash(r.inn, 1)}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {r.drs ?? "—"}
                     </td>
-                    <td className="py-2 px-3 font-mono tabular-nums">
+                    <td className="py-1.5 px-2 font-mono tabular-nums">
                       {r.oaa ?? "—"}
                     </td>
                   </tr>
@@ -298,7 +298,7 @@ function HistoricalSeasonsSection({
 function PitchesTable({ pitches }: { pitches: StatcastPitch[] }) {
   return (
     <div className="rounded-xl border border-[#d0daea] bg-white overflow-x-auto">
-      <div className="px-4 py-3 border-b border-[#d0daea] bg-[#f4f7fb] flex flex-wrap items-center justify-between gap-2">
+      <div className="px-3 py-2 border-b border-[#d0daea] bg-[#f4f7fb] flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-[#0f2044]">
           Last 10 pitches / batted balls
         </h2>
@@ -307,16 +307,16 @@ function PitchesTable({ pitches }: { pitches: StatcastPitch[] }) {
       <table className="min-w-full text-xs sm:text-sm">
         <thead>
           <tr className="text-left text-[#7a8fa8] bg-[#f4f7fb] border-b border-[#f0f4f9]">
-            <th className="py-2 px-3 font-medium">Date</th>
-            <th className="py-2 px-3 font-medium">Pitch</th>
-            <th className="py-2 px-3 font-medium">Velo</th>
-            <th className="py-2 px-3 font-medium hidden sm:table-cell">
+            <th className="py-1.5 px-2 font-medium">Date</th>
+            <th className="py-1.5 px-2 font-medium">Pitch</th>
+            <th className="py-1.5 px-2 font-medium">Velo</th>
+            <th className="py-1.5 px-2 font-medium hidden sm:table-cell">
               LA
             </th>
-            <th className="py-2 px-3 font-medium hidden sm:table-cell">
+            <th className="py-1.5 px-2 font-medium hidden sm:table-cell">
               EV
             </th>
-            <th className="py-2 px-3 font-medium">Event</th>
+            <th className="py-1.5 px-2 font-medium">Event</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[#f0f4f9] text-[#1e3050]">
@@ -325,22 +325,22 @@ function PitchesTable({ pitches }: { pitches: StatcastPitch[] }) {
               key={p.id}
               className="bg-white hover:bg-[#f4f7fb] transition-colors"
             >
-              <td className="py-2 px-3 whitespace-nowrap font-mono tabular-nums text-[#7a8fa8]">
+              <td className="py-1.5 px-2 whitespace-nowrap font-mono tabular-nums text-[#7a8fa8]">
                 {p.game_date ?? "—"}
               </td>
-              <td className="py-2 px-3 text-[#1e3050]">
+              <td className="py-1.5 px-2 text-[#1e3050]">
                 {p.pitch_name ?? p.pitch_type ?? "—"}
               </td>
-              <td className="py-2 px-3 font-mono tabular-nums text-[#1e3050]">
+              <td className="py-1.5 px-2 font-mono tabular-nums text-[#1e3050]">
                 {p.release_speed != null ? `${p.release_speed.toFixed(1)}` : "—"}
               </td>
-              <td className="py-2 px-3 font-mono tabular-nums hidden sm:table-cell text-[#1e3050]">
+              <td className="py-1.5 px-2 font-mono tabular-nums hidden sm:table-cell text-[#1e3050]">
                 {p.launch_angle != null ? `${p.launch_angle.toFixed(0)}°` : "—"}
               </td>
-              <td className="py-2 px-3 font-mono tabular-nums hidden sm:table-cell text-[#1e3050]">
+              <td className="py-1.5 px-2 font-mono tabular-nums hidden sm:table-cell text-[#1e3050]">
                 {p.launch_speed != null ? `${p.launch_speed.toFixed(1)}` : "—"}
               </td>
-              <td className="py-2 px-3 max-w-[140px] sm:max-w-xs truncate text-[#1e3050]">
+              <td className="py-1.5 px-2 max-w-[140px] sm:max-w-xs truncate text-[#1e3050]">
                 {p.events ?? p.description ?? "—"}
               </td>
             </tr>
@@ -443,7 +443,7 @@ export default function PlayerProfilePage() {
     profile?.historicalFielding?.filter((r) => r.season !== season) ?? [];
 
   return (
-    <div className="bg-white text-[#1e3050] max-w-6xl mx-auto space-y-6">
+    <div className="bg-white text-[#1e3050] max-w-6xl mx-auto space-y-4">
       <p className="text-xs font-black tracking-tight">
         <span className="text-[#b8922a]">WAR</span>
         <span className="text-[#0f2044]">room</span>
@@ -475,7 +475,7 @@ export default function PlayerProfilePage() {
 
       {!loading && !error && profile && Number.isFinite(playerId) ? (
         <>
-          <div className="space-y-3">
+          <div className="space-y-2">
             <PlayerProfileBanner
               profile={profile}
               playerId={playerId}
@@ -491,17 +491,17 @@ export default function PlayerProfilePage() {
           {topPitches.length > 0 ? (
             <PitchesTable pitches={topPitches} />
           ) : (
-            <p className="text-sm text-[#7a8fa8] text-center py-6 border border-dashed border-[#d0daea] rounded-xl bg-[#f4f7fb]">
+            <p className="text-sm text-[#7a8fa8] text-center py-4 border border-dashed border-[#d0daea] rounded-xl bg-[#f4f7fb]">
               No pitch or batted-ball rows in Supabase for this player yet.
             </p>
           )}
 
           {showPitchArsenalDetail ? (
             <details className="rounded-xl border border-[#d0daea] bg-white group">
-              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-[#0f2044] bg-[#f4f7fb] border-b border-transparent group-open:border-[#d0daea]">
+              <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-[#0f2044] bg-[#f4f7fb] border-b border-transparent group-open:border-[#d0daea]">
                 Pitch arsenal · by pitch type
               </summary>
-              <div className="p-4">
+              <div className="p-3">
                 <PitcherStatcastSection
                   pitcherPercentiles={profile.pitcherPercentiles}
                   season={season}
@@ -525,7 +525,7 @@ export default function PlayerProfilePage() {
           {profile.supabasePlayer &&
           supabaseBioHasDisplayData(profile.supabasePlayer) ? (
             <details className="rounded-xl border border-[#d0daea] bg-white group">
-              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-[#0f2044] bg-[#f4f7fb] border-b border-transparent group-open:border-[#d0daea]">
+              <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-[#0f2044] bg-[#f4f7fb] border-b border-transparent group-open:border-[#d0daea]">
                 Extended bio
               </summary>
               <div className="p-0">

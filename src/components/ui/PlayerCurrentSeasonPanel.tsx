@@ -104,14 +104,14 @@ function StatGrid({
   rows: { label: string; value: string; gold?: boolean }[];
 }) {
   return (
-    <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5">
+    <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-2.5 gap-y-1">
       {rows.map((row) => (
         <div key={row.label} className="min-w-0">
           <dt className="text-[10px] font-semibold uppercase tracking-wider text-[#7a8fa8] truncate">
             {row.label}
           </dt>
           <dd
-            className={`font-mono text-sm tabular-nums leading-tight ${
+            className={`font-mono text-xs tabular-nums leading-tight ${
               row.gold ? "font-bold text-[#b8922a]" : "text-[#0f2044]"
             }`}
           >
@@ -138,20 +138,20 @@ function CategorySection({
 }) {
   return (
     <section className="rounded-lg border border-[#d0daea] overflow-hidden">
-      <div className="px-3 py-2 bg-[#f4f7fb] border-b border-[#d0daea]">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[#1e3a6b]">
+      <div className="px-2 py-1 bg-[#f4f7fb] border-b border-[#d0daea]">
+        <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[#1e3a6b]">
           {title}
         </h3>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 lg:divide-x divide-[#d0daea]">
-        <div className="p-3 space-y-2 border-b lg:border-b-0 border-[#d0daea]">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#7a8fa8]">
+        <div className="p-2 space-y-1 border-b lg:border-b-0 border-[#d0daea]">
+          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#7a8fa8]">
             {leftLabel}
           </p>
           {left}
         </div>
-        <div className="p-3 space-y-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#7a8fa8]">
+        <div className="p-2 space-y-1 min-w-0 overflow-hidden">
+          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#7a8fa8]">
             {rightLabel}
           </p>
           {right}
@@ -178,7 +178,7 @@ function BatterBarGroup({
 }) {
   if (batterPercentiles == null) {
     return (
-      <p className="text-xs text-[#7a8fa8] py-2">No Statcast data available.</p>
+      <p className="text-xs text-[#7a8fa8] py-1">No Statcast data available.</p>
     );
   }
 
@@ -225,7 +225,7 @@ function BatterBarGroup({
   };
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-1.5">
       {keys.map((key) => {
         const m = metrics[key];
         const def = defs[key];
@@ -251,7 +251,7 @@ function PitcherBarGroup({
 }) {
   if (pitcherPercentiles == null) {
     return (
-      <p className="text-xs text-[#7a8fa8] py-2">No Statcast data available.</p>
+      <p className="text-xs text-[#7a8fa8] py-1">No Statcast data available.</p>
     );
   }
 
@@ -293,7 +293,7 @@ function PitcherBarGroup({
   ];
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-1.5">
       {rows.map(({ key, label, fmt, warroom }) => {
         const m = metrics[key];
         return (
@@ -364,7 +364,7 @@ export default function PlayerCurrentSeasonPanel({
 
   return (
     <div className="rounded-xl border border-[#d0daea] bg-white overflow-hidden">
-      <div className="border-b border-[#f0f4f9] bg-[#f4f7fb] px-4 py-2.5">
+      <div className="border-b border-[#f0f4f9] bg-[#f4f7fb] px-3 py-2">
         <h2 className="text-sm font-semibold text-[#0f2044]">
           {season} season
         </h2>
@@ -373,7 +373,7 @@ export default function PlayerCurrentSeasonPanel({
         </p>
       </div>
 
-      <div className="p-4 space-y-3">
+      <div className="p-3 space-y-2">
         {(showBatting || showBattingTwoWay) && batting ? (
           <CategorySection
             title="Batting"
@@ -438,7 +438,7 @@ export default function PlayerCurrentSeasonPanel({
           <CategorySection
             title="Fielding"
             left={
-              <div className="space-y-3">
+              <div className="space-y-1.5">
                 {batting?.fwpr != null ? (
                   <StatGrid
                     rows={[
@@ -475,7 +475,7 @@ export default function PlayerCurrentSeasonPanel({
               </div>
             }
             right={
-              <div className="space-y-3">
+              <div className="space-y-1.5">
                 {fielding.map((line) => (
                   <div key={`${line.id}-adv`} className="space-y-1.5">
                     <p className="text-xs font-semibold text-[#0f2044]">

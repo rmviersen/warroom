@@ -5,10 +5,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import TeamWprDiamond from "@/components/ui/TeamWprDiamond";
+import BaseballFieldView from "@/components/ui/BaseballFieldView";
 import { getTeamLogoUrl } from "@/lib/mlb-images";
 import type {
   TeamDetailApiResponse,
+  TeamPositionWprApiResponse,
+  TeamPositionWprPlayerRow,
+  TeamPositionWprPlayersApiResponse,
+  TeamPositionWprRow,
   TeamRosterPlayer,
   TeamRosterPositionGroup,
   TeamStatcastApiResponse,
@@ -397,6 +401,11 @@ export default function TeamDetailPage() {
   const [statcast, setStatcast] = useState<TeamStatcastApiResponse | null>(
     null,
   );
+  const [positionWpr, setPositionWpr] = useState<TeamPositionWprRow[]>([]);
+  const [positionPlayers, setPositionPlayers] = useState<
+    TeamPositionWprPlayerRow[]
+  >([]);
+  const [positionWprError, setPositionWprError] = useState(false);
   const [statcastError, setStatcastError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -409,20 +418,12 @@ export default function TeamDetailPage() {
     setLoading(true);
     setError(null);
     setStatcastError(false);
-    const year = new Date().getFullYear();
-    try {
-      const [teamRes, scRes] = await Promise.all([
-        fetch(`/api/teams/${id}`),
-        fetch(`/api/teams/${id}/statcast?season=${year}`),
-      ]);
+    setPositionWprError(false);
+    setPositionWpr([]);
+    setPositionPlayers([]);
 
-      if (scRes.ok) {
-        setStatcast((await scRes.json()) as TeamStatcastApiResponse);
-        setStatcastError(false);
-      } else {
-        setStatcast(null);
-        setStatcastError(true);
-      }
+    try {
+      const teamRes = await fetch(`/api/teams/${id}`, { cache: "no-store" });
 
       if (teamRes.status === 404) {
         setError("Team not found.");
@@ -438,12 +439,53 @@ export default function TeamDetailPage() {
         setData(null);
         return;
       }
+
       const json = (await teamRes.json()) as TeamDetailApiResponse;
       setData(json);
+
+      const season = json.stats?.season ?? new Date().getFullYear();
+
+      const [scRes, wprRes, wprPlayersRes] = await Promise.all([
+        fetch(`/api/teams/${id}/statcast?season=${season}`, { cache: "no-store" }),
+        fetch(`/api/teams/${id}/position-wpr?season=${season}`, {
+          cache: "no-store",
+        }),
+        fetch(`/api/teams/${id}/position-wpr/players?season=${season}`, {
+          cache: "no-store",
+        }),
+      ]);
+
+      if (wprRes.ok) {
+        const wprJson = (await wprRes.json()) as TeamPositionWprApiResponse;
+        setPositionWpr(wprJson.positions ?? []);
+        setPositionWprError(false);
+      } else {
+        setPositionWpr([]);
+        setPositionWprError(true);
+      }
+
+      if (wprPlayersRes.ok) {
+        const playersJson =
+          (await wprPlayersRes.json()) as TeamPositionWprPlayersApiResponse;
+        setPositionPlayers(playersJson.players ?? []);
+      } else {
+        setPositionPlayers([]);
+      }
+
+      if (scRes.ok) {
+        setStatcast((await scRes.json()) as TeamStatcastApiResponse);
+        setStatcastError(false);
+      } else {
+        setStatcast(null);
+        setStatcastError(true);
+      }
     } catch {
       setError("Something went wrong while loading this team.");
       setData(null);
       setStatcast(null);
+      setPositionWpr([]);
+      setPositionPlayers([]);
+      setPositionWprError(true);
       setStatcastError(true);
     } finally {
       setLoading(false);
@@ -459,6 +501,16 @@ export default function TeamDetailPage() {
     if (groupFilter === "all") return data.roster;
     return data.roster.filter((r) => r.positionGroup === groupFilter);
   }, [data, groupFilter]);
+
+  const playersByPosition = useMemo(() => {
+    const map = new Map<string, TeamPositionWprPlayerRow[]>();
+    for (const player of positionPlayers) {
+      const list = map.get(player.position) ?? [];
+      list.push(player);
+      map.set(player.position, list);
+    }
+    return map;
+  }, [positionPlayers]);
 
   const season = data?.stats?.season ?? new Date().getFullYear();
   const statcastSeason = statcast?.teamStatcast?.season ?? season;
@@ -500,7 +552,12 @@ export default function TeamDetailPage() {
         <>
           <TeamHeader team={data.team} teamId={teamId} />
 
-          <TeamWprDiamond season={season} data={null} />
+          <BaseballFieldView
+            season={season}
+            positions={positionWpr}
+            playersByPosition={playersByPosition}
+            loadError={positionWprError}
+          />
 
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-[#0f2044]">
