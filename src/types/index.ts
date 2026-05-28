@@ -523,6 +523,34 @@ export interface StatcastPitch {
 }
 
 // =============================================================================
+// Team position WPR
+// =============================================================================
+
+/** One row from GET /api/teams/[id]/position-wpr (team_position_wpr_season view). */
+export interface TeamPositionWprRow {
+  /** Defensive position code: P | C | 1B | 2B | 3B | SS | LF | CF | RF | OF */
+  position: string;
+  /** Innings-weighted sum of player bWPR at this position. Null for P slot. */
+  bwpr: number | null;
+  /** Innings-weighted sum of player fWPR at this position. Null for P slot. */
+  fwpr: number | null;
+  /** Innings-weighted sum of player brWPR at this position. Null for P slot. */
+  brwpr: number | null;
+  /** Innings-weighted sum of player wpr (bwpr+fwpr+brwpr). Null for P slot. */
+  wpr: number | null;
+  /** Sum of pwpr for all pitchers on this team-season. Non-null for P slot only. */
+  pwpr: number | null;
+  /** Number of distinct players contributing to this position. */
+  player_count: number;
+}
+
+/** GET /api/teams/[id]/position-wpr JSON body. */
+export interface TeamPositionWprApiResponse {
+  positions: TeamPositionWprRow[];
+  season: number;
+}
+
+// =============================================================================
 // Pipeline status / RAG tracker
 // =============================================================================
 

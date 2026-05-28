@@ -933,6 +933,22 @@ Season-level totals for players are stored in ``player_batting_seasons``, ``play
 
 Unique indexes support upserts (see DDL above). The player profile API exposes the three player tables as ``historicalBatting``, ``historicalPitching``, and ``historicalFielding`` (newest ``season`` first).
 
+## ``team_position_wpr_season`` (view)
+
+Migration: ``supabase/migrations/20260528120000_create_team_position_wpr_view.sql``.
+
+Read-only view that computes innings-weighted WPR by defensive position for each team-season. Useful for the baseball field position-card display on team pages.
+
+**How it works:** For each player, their fraction of innings at each position is calculated from ``player_fielding_seasons.inn``. That fraction is applied to their ``bwpr``, ``fwpr``, ``brwpr``, and ``wpr`` from ``player_batting_seasons``, then summed across all players for each team-position. The ``P`` slot is handled separately — ``pwpr`` is summed from ``player_pitching_seasons``.
+
+Positions ``DH``, ``PH``, ``PR`` are excluded (not defensive field slots). ``OF`` rows pass through for pre-Statcast data where outfield position is not split.
+
+Columns: ``team_id``, ``season``, ``position``, ``bwpr``, ``fwpr``, ``brwpr``, ``wpr``, ``pwpr``, ``player_count``.
+
+**Consumer:** ``GET /api/teams/[id]/position-wpr?season=YYYY`` — returns all rows for a team-season as ``TeamPositionWprApiResponse``.
+
+---
+
 ## ``player_season_wpr_totals`` (view)
 
 Migration: ``supabase/migrations/20260528110000_create_wpr_totals_view.sql``.
