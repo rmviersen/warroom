@@ -253,6 +253,83 @@ export interface TeamOverviewStat {
   rank: number | null;
 }
 
+/** Ranked stat for the team profile banner (``proprietary`` = WARroom gold metrics). */
+export interface TeamBannerStat extends TeamOverviewStat {
+  proprietary?: boolean;
+}
+
+export interface TeamBannerRecord {
+  wins: number;
+  losses: number;
+  winPct: string;
+  divisionRank: number | null;
+  divisionName: string | null;
+  gamesBack: string;
+  playoffPosition: boolean;
+}
+
+export interface TeamBannerStatcastBlock {
+  avg_exit_velocity: TeamBannerStat;
+  max_exit_velocity: TeamBannerStat;
+  avg_launch_angle: TeamBannerStat;
+  barrel_rate: TeamBannerStat;
+  hard_hit_rate: TeamBannerStat;
+  avg_xwoba: TeamBannerStat;
+  avg_sprint_speed: TeamBannerStat;
+  cqi: TeamBannerStat;
+}
+
+export interface TeamBannerWprBlock {
+  hitting: {
+    bwpr: TeamBannerStat;
+    fwpr: TeamBannerStat;
+    brwpr: TeamBannerStat;
+    wpr: TeamBannerStat;
+  };
+  pitching: {
+    pwpr: TeamBannerStat;
+  };
+}
+
+/** GET /api/teams/[id]/banner JSON body. */
+export interface TeamBannerApiResponse {
+  season: number;
+  record: TeamBannerRecord | null;
+  batting: {
+    avg: TeamBannerStat;
+    obp: TeamBannerStat;
+    slg: TeamBannerStat;
+    ops: TeamBannerStat;
+    runs: TeamBannerStat;
+    homeRuns: TeamBannerStat;
+    woba: TeamBannerStat;
+    wrc_plus: TeamBannerStat;
+    iso: TeamBannerStat;
+    bb_pct: TeamBannerStat;
+    k_pct: TeamBannerStat;
+  };
+  pitching: {
+    era: TeamBannerStat;
+    whip: TeamBannerStat;
+    runsAllowed: TeamBannerStat;
+    strikeOuts: TeamBannerStat;
+    fip: TeamBannerStat;
+    xfip: TeamBannerStat;
+    k_pct: TeamBannerStat;
+    bb_pct: TeamBannerStat;
+    k_bb_pct: TeamBannerStat;
+    stuff_plus: TeamBannerStat;
+  };
+  fielding: {
+    fld_pct: TeamBannerStat;
+    errors: TeamBannerStat;
+    oaa: TeamBannerStat;
+    fwpr: TeamBannerStat;
+  };
+  statcast: TeamBannerStatcastBlock | null;
+  wpr: TeamBannerWprBlock | null;
+}
+
 /** Compact team card payload for GET /api/teams. */
 export interface TeamOverview {
   id: number;

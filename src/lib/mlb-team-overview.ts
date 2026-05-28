@@ -98,7 +98,7 @@ function parseBulkTeamStats(raw: unknown): Map<number, Record<string, unknown>> 
   return map;
 }
 
-function rankByValue(
+export function rankByValue(
   entries: { id: number; value: number | null }[],
   lowerIsBetter: boolean,
 ): Map<number, number> {
@@ -120,7 +120,7 @@ function rankByValue(
   return ranks;
 }
 
-function statCell(
+export function statCell(
   value: string | null,
   rank: number | null | undefined,
 ): TeamOverviewStat {
