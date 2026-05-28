@@ -116,7 +116,7 @@ Runs only when **`league_batting_averages`** and **`lg_ip`** resolve for that se
 | **fWPR** | `fwpr`, `calc_fielding_season_metrics` | **Shipped** |
 | **pWPR** | `pwpr`, `calc_pitching_season_metrics` | **Shipped** |
 | **brWPR** | `brwpr`, `calc_baserunning_season_metrics` | **Shipped** |
-| **Total WPR** | `wpr` | **Not built** — needs rollup rule once brWPR populates |
+| **Total WPR** | `wpr`, `calc_wpr_season_metrics` | **Shipped** — `bwpr + fwpr + brwpr`; 38,457 rows 1990–2026 |
 
 ---
 
@@ -148,6 +148,7 @@ Runs only when **`league_batting_averages`** and **`lg_ip`** resolve for that se
 | `seed_statcast_running.py` | Savant sprint speed leaderboard → **`statcast_running`** (2015+) |
 | `seed_statcast_baserunning_rv.py` | Savant baserunning run-value leaderboard → **`statcast_baserunning_rv`** (2016+) |
 | `calc_baserunning_season_metrics.py` | **`brwpr`** — three-tier: Statcast RV (2016+), sprint+wSB (2015), wSB fallback |
+| `calc_wpr_season_metrics.py` | **`wpr`** = `bwpr + fwpr + brwpr` (position-player total WPR) |
 | `seed_statcast_oaa.py` | Loads **`statcast_fielding_oaa`** from Savant/defensive exports |
 | `seed_statcast_catcher_poptime.py` | Loads **`statcast_catcher_defense`** |
 | `seed_players.py`, `seed_teams.py`, `seed_missing_players.py`, `fix_missing_players.py` | Identity hygiene |
@@ -182,7 +183,7 @@ Runs only when **`league_batting_averages`** and **`lg_ip`** resolve for that se
 6. **`calc_league_averages.py`** when league numerators refresh (GA: Mondays — see §6)
 7. **`calc_pitching_season_metrics.py`** (**`pwpr`**, Stuff+)
 8. **`calc_batting_season_metrics.py`** (**`bwpr`**)
-9. **`seed_statcast_running.py`** → **`seed_statcast_baserunning_rv.py`** → **`calc_baserunning_season_metrics.py`** (**`brwpr`**)
+9. **`seed_statcast_running.py`** → **`seed_statcast_baserunning_rv.py`** → **`calc_baserunning_season_metrics.py`** (**`brwpr`**) → **`calc_wpr_season_metrics.py`** (**`wpr`**)
 10. **`seed_statcast_oaa.py`** → **`calc_fielding_season_metrics.py`** (**`fwpr`**); **`seed_statcast_catcher_poptime.py`** when refreshing catcher leaderboard inputs
 11. **`calc_league_pitch_type_averages.py`** periodically (Stuff+ denominators — often weekly with aggregates)
 12. **`calc_park_factors.py`** on schedule cadence tied to standings/park workload

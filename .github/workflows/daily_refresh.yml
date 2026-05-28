@@ -90,6 +90,9 @@ jobs:
       - name: Calculate baserunning season metrics
         run: python calc_baserunning_season_metrics.py --start-season $SEASON --end-season $SEASON
 
+      - name: Calculate total WPR
+        run: python calc_wpr_season_metrics.py --start-season $SEASON --end-season $SEASON
+
       - name: Check if Monday
         id: day_check
         run: |
