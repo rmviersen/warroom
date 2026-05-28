@@ -12,6 +12,8 @@ ALTER TABLE public.player_pitching_seasons
   ADD COLUMN IF NOT EXISTS pitcher_role TEXT;
 
 -- ── Updated upsert RPC ─────────────────────────────────────────────────────
+-- NOTE: war was renamed to pwpr in migration 20260522150000. This RPC uses
+-- pwpr throughout — do not reintroduce the war column name.
 
 CREATE OR REPLACE FUNCTION public.upsert_player_pitching_seasons(
   rows JSONB
@@ -55,7 +57,7 @@ BEGIN
       hr_per_9,
       k_bb,
       era_plus,
-      war,
+      pwpr,
       lob_pct,
       stuff_plus,
       pitcher_role,
@@ -91,7 +93,7 @@ BEGIN
       (r->>'hr_per_9')::NUMERIC,
       (r->>'k_bb')::NUMERIC,
       (r->>'era_plus')::INTEGER,
-      (r->>'war')::NUMERIC,
+      (r->>'pwpr')::NUMERIC,
       (r->>'lob_pct')::NUMERIC,
       (r->>'stuff_plus')::NUMERIC,
       (r->>'pitcher_role')::TEXT,
@@ -125,7 +127,7 @@ BEGIN
       hr_per_9      = COALESCE(EXCLUDED.hr_per_9,       player_pitching_seasons.hr_per_9),
       k_bb          = COALESCE(EXCLUDED.k_bb,           player_pitching_seasons.k_bb),
       era_plus      = COALESCE(EXCLUDED.era_plus,       player_pitching_seasons.era_plus),
-      war           = COALESCE(EXCLUDED.war,            player_pitching_seasons.war),
+      pwpr          = COALESCE(EXCLUDED.pwpr,           player_pitching_seasons.pwpr),
       lob_pct       = COALESCE(EXCLUDED.lob_pct,        player_pitching_seasons.lob_pct),
       stuff_plus    = COALESCE(EXCLUDED.stuff_plus,     player_pitching_seasons.stuff_plus),
       pitcher_role  = COALESCE(EXCLUDED.pitcher_role,   player_pitching_seasons.pitcher_role),
