@@ -145,6 +145,9 @@ Runs only when **`league_batting_averages`** and **`lg_ip`** resolve for that se
 | `calc_batting_season_metrics.py` | **`player_batting_seasons`** derivatives + **`bwpr`** |
 | `calc_pitching_season_metrics.py` | **`player_pitching_seasons`** derivatives + **`pwpr`** + Stuff+ rollup |
 | `calc_fielding_season_metrics.py` | **`fwpr`** from OAA (**2016+**) or RF/9 fallback (see §3.5) |
+| `seed_statcast_running.py` | Savant sprint speed leaderboard → **`statcast_running`** (2015+) |
+| `seed_statcast_baserunning_rv.py` | Savant baserunning run-value leaderboard → **`statcast_baserunning_rv`** (2016+) |
+| `calc_baserunning_season_metrics.py` | **`brwpr`** — three-tier: Statcast RV (2016+), sprint+wSB (2015), wSB fallback |
 | `seed_statcast_oaa.py` | Loads **`statcast_fielding_oaa`** from Savant/defensive exports |
 | `seed_statcast_catcher_poptime.py` | Loads **`statcast_catcher_defense`** |
 | `seed_players.py`, `seed_teams.py`, `seed_missing_players.py`, `fix_missing_players.py` | Identity hygiene |
@@ -165,6 +168,7 @@ Runs only when **`league_batting_averages`** and **`lg_ip`** resolve for that se
 | `batting_calcs.py` | wOBA/OPS+/wRC+, **CQI**, **`calc_batting_war`**, positional weighting |
 | `pitching_calcs.py` | FIP/ERA+/LOB%, **`calc_pitching_war`**, **`calc_stuff_plus`** |
 | `fielding_calcs.py` | Basic FIELD% / RF rate helpers |
+| `baserunning_calcs.py` | **`calc_wsb_runs`**, **`calc_sprint_runs`**, **`calc_baserunning_war`**; tier constants |
 
 ### 4.4 Recommended **daily refresh** order (deps)
 
@@ -178,9 +182,10 @@ Runs only when **`league_batting_averages`** and **`lg_ip`** resolve for that se
 6. **`calc_league_averages.py`** when league numerators refresh (GA: Mondays — see §6)
 7. **`calc_pitching_season_metrics.py`** (**`pwpr`**, Stuff+)
 8. **`calc_batting_season_metrics.py`** (**`bwpr`**)
-9. **`seed_statcast_oaa.py`** → **`calc_fielding_season_metrics.py`** (**`fwpr`**); **`seed_statcast_catcher_poptime.py`** when refreshing catcher leaderboard inputs
-10. **`calc_league_pitch_type_averages.py`** periodically (Stuff+ denominators — often weekly with aggregates)
-11. **`calc_park_factors.py`** on schedule cadence tied to standings/park workload
+9. **`seed_statcast_running.py`** → **`seed_statcast_baserunning_rv.py`** → **`calc_baserunning_season_metrics.py`** (**`brwpr`**)
+10. **`seed_statcast_oaa.py`** → **`calc_fielding_season_metrics.py`** (**`fwpr`**); **`seed_statcast_catcher_poptime.py`** when refreshing catcher leaderboard inputs
+11. **`calc_league_pitch_type_averages.py`** periodically (Stuff+ denominators — often weekly with aggregates)
+12. **`calc_park_factors.py`** on schedule cadence tied to standings/park workload
 
 Individual CLIs expose `--season`, `--start-season`, `--end-season`, etc.; read each `main()`.
 

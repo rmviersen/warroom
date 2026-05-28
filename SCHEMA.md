@@ -463,7 +463,8 @@ CREATE TABLE team_fielding_seasons (
 -- Statcast sprint speed / running leaderboard by player and season (2015+).
 -- player_id: MLBAM id, soft reference to players.id (no FK).
 -- Seeded by pipeline/seed_statcast_running.py from Savant sprint speed leaderboard.
--- Consumed by calc_baserunning_season_metrics.py for the sprint-speed component of brWPR.
+-- Consumed by calc_baserunning_season_metrics.py for the 2015-only sprint-speed tier of brWPR.
+-- Also displayed on player profiles (sprint_speed, bolts, hp_to_1b).
 CREATE TABLE statcast_running (
   id               BIGSERIAL PRIMARY KEY,
   player_id        BIGINT        NOT NULL,
@@ -479,6 +480,35 @@ CREATE TABLE statcast_running (
   competitive_runs INTEGER,
   bolt_rate        NUMERIC(7,4),
   updated_at       TIMESTAMPTZ   DEFAULT NOW()
+);
+
+-- Statcast baserunning run values by player and season (2016+).
+-- player_id: MLBAM id, soft reference to players.id (no FK).
+-- Seeded by pipeline/seed_statcast_baserunning_rv.py from Savant baserunning-run-value leaderboard.
+-- runner_runs_tot is the primary brWPR input for 2016+ (Tier 1), replacing the
+-- wSB + sprint-speed-proxy approach. runner_runs_xb captures extra-bases-taken value
+-- (not available from any counting-stat source).
+CREATE TABLE statcast_baserunning_rv (
+  id                          BIGSERIAL PRIMARY KEY,
+  player_id                   BIGINT        NOT NULL,
+  player_name                 TEXT,
+  team                        TEXT,
+  season                      INTEGER       NOT NULL,
+  runner_runs_tot             NUMERIC(8,4),  -- total: SB + extra bases combined
+  runner_runs_xb              NUMERIC(8,4),  -- extra-bases-taken component
+  runner_runs_sbx             NUMERIC(8,4),  -- stolen-base component
+  runner_runs_sb2             NUMERIC(8,4),
+  runner_runs_sb3             NUMERIC(8,4),
+  runner_runs_xb_swipe        NUMERIC(8,4),
+  runner_runs_xb_snipe        NUMERIC(8,4),
+  runner_runs_xb_freeze       NUMERIC(8,4),
+  n_runner_moved              INTEGER,
+  n_runner_moved_xb           INTEGER,
+  n_runner_moved_sbx          INTEGER,
+  sb2_count                   INTEGER,
+  sb3_count                   INTEGER,
+  updated_at                  TIMESTAMPTZ   DEFAULT NOW(),
+  UNIQUE (player_id, season)
 );
 
 -- Park factors by franchise and season (``team_id``: MLBAM id, soft reference to ``teams.id``).

@@ -83,6 +83,10 @@ jobs:
         run: python seed_statcast_running.py --start-season $SEASON --end-season $SEASON
         continue-on-error: true
 
+      - name: Seed Statcast baserunning run values
+        run: python seed_statcast_baserunning_rv.py --start-season $SEASON --end-season $SEASON
+        continue-on-error: true
+
       - name: Calculate baserunning season metrics
         run: python calc_baserunning_season_metrics.py --start-season $SEASON --end-season $SEASON
 
