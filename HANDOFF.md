@@ -127,6 +127,12 @@ Runs only when **`league_batting_averages`** and **`lg_ip`** resolve for that se
 1. **Partial-upsert RPCs** — SECURITY DEFINER upserts (`upsert_statcast_*`, `upsert_player_*_seasons`) **merge** rows so **omitted JSON keys keep prior DB values** (`COALESCE(EXCLUDED.col, existing.col)` pattern). Scripts can PATCH **`fwpr`** or **`bwpr`** without sending full historical counting stat payloads. Migration family **`202605221*`** in `supabase/migrations/`.
 2. **Split offensive vs defensive batting value** — **`calc_batting_season_metrics.py`** owns **`bwpr`** (+ rate stats); **`calc_fielding_season_metrics.py`** owns **`fwpr`**. Both target the **same** `player_batting_seasons` conflict key `(player_id, season, team_id)` without clobbering each other’s columns.
 
+### 4.1a Known RLS migration gaps (patched)
+
+| Table | Issue | Fix migration |
+|-------|-------|---------------|
+| `statcast_pitching` | `create_statcast_pitching` (20260519120000) omitted `ENABLE ROW LEVEL SECURITY` and the public-read policy. Anon-key direct queries returned 0 rows silently. Surfaced by `/status` RAG page. | `20260528100000_statcast_pitching_public_read_policy.sql` |
+
 ### 4.2 Script inventory (`pipeline/`)
 
 | Script | Role |
