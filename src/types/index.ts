@@ -257,6 +257,7 @@ export interface TeamOverviewStat {
 export interface TeamOverview {
   id: number;
   name: string | null;
+  abbreviation: string | null;
   division: string | null;
   league: string | null;
   league_id: number | null;
@@ -267,12 +268,14 @@ export interface TeamOverview {
   pitching: {
     era: TeamOverviewStat;
     whip: TeamOverviewStat;
+    runsAllowed: TeamOverviewStat;
   };
   hitting: {
     avg: TeamOverviewStat;
     slg: TeamOverviewStat;
     ops: TeamOverviewStat;
     homeRuns: TeamOverviewStat;
+    runsScored: TeamOverviewStat;
   };
 }
 
@@ -315,6 +318,30 @@ export interface TeamRosterPlayer {
 }
 
 /** GET /api/teams/[id] JSON body. */
+export type TeamDiamondPosition =
+  | "C"
+  | "1B"
+  | "2B"
+  | "3B"
+  | "SS"
+  | "LF"
+  | "CF"
+  | "RF";
+
+/** bWPR / fWPR / brWPR rollup for one defensive spot on the team diamond. */
+export interface TeamPositionWprSummary {
+  bwpr: number | null;
+  fwpr: number | null;
+  brwpr: number | null;
+}
+
+/** Team-level WPR by position for the diamond visual (populated when pipeline ships). */
+export interface TeamWprDiamondData {
+  season: number;
+  positions: Partial<Record<TeamDiamondPosition, TeamPositionWprSummary>>;
+  pitching: { pwpr: number | null };
+}
+
 export interface TeamDetailApiResponse {
   team: Record<string, unknown>;
   roster: TeamRosterPlayer[];

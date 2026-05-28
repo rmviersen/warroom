@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import BatterStatcastSection from "@/components/ui/BatterStatcastSection";
 import PitcherStatcastSection from "@/components/ui/PitcherStatcastSection";
+import PlayerCurrentSeasonPanel from "@/components/ui/PlayerCurrentSeasonPanel";
+import PlayerProfileBanner from "@/components/ui/PlayerProfileBanner";
 import type {
   PlayerBattingSeasonRow,
   PlayerFieldingSeasonRow,
@@ -294,135 +295,6 @@ function HistoricalSeasonsSection({
   );
 }
 
-function PersonHeader({
-  player,
-}: {
-  player: Record<string, unknown> | null;
-}) {
-  if (!player) return null;
-  const fullName = String(player.fullName ?? "Player");
-  const pos = player.primaryPosition as { abbreviation?: string } | undefined;
-  const team = player.currentTeam as { name?: string } | undefined;
-  const position = pos?.abbreviation ?? "—";
-  const teamName = team?.name ?? "—";
-
-  return (
-    <header className="space-y-2 border-b border-[#d0daea] pb-6">
-      <p className="text-xs font-medium uppercase tracking-wider text-[#7a8fa8]">
-        {teamName}
-      </p>
-      <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-[#0f2044]">
-        {fullName}
-      </h1>
-      <p className="text-sm text-[#7a8fa8]">
-        Position{" "}
-        <span className="font-mono tabular-nums text-[#7a8fa8]">{position}</span>
-      </p>
-    </header>
-  );
-}
-
-function HittingTable({
-  season,
-  stats,
-}: {
-  season: number;
-  stats: NonNullable<PlayerProfileApiResponse["mlbStats"]>["hitting"];
-}) {
-  if (!stats) {
-    return (
-      <p className="text-sm text-[#7a8fa8]">
-        No season hitting splits in MLB Stats API for {season}.
-      </p>
-    );
-  }
-  const rows: { label: string; value: string }[] = [
-    { label: "H", value: stats.hits != null ? String(stats.hits) : "—" },
-    { label: "HR", value: stats.homeRuns != null ? String(stats.homeRuns) : "—" },
-    { label: "RBI", value: stats.rbi != null ? String(stats.rbi) : "—" },
-    { label: "AVG", value: stats.avg ?? "—" },
-    { label: "OPS", value: stats.ops ?? "—" },
-  ];
-
-  return (
-    <div className="rounded-xl border border-[#d0daea] bg-[#f4f7fb] overflow-hidden">
-      <div className="px-4 py-3 border-b border-[#d0daea] bg-[#f4f7fb]">
-        <h2 className="text-sm font-semibold text-[#0f2044]">
-          Traditional · {season} batting
-        </h2>
-      </div>
-      <table className="w-full text-sm">
-        <tbody className="divide-y divide-[#f0f4f9]">
-          {rows.map((r) => (
-            <tr key={r.label}>
-              <th
-                scope="row"
-                className="py-3 px-4 text-left font-medium text-[#7a8fa8] w-1/3"
-              >
-                {r.label}
-              </th>
-              <td className="py-3 px-4 text-right font-mono tabular-nums text-[#1e3050]">
-                {r.value}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function PitchingTable({
-  season,
-  stats,
-}: {
-  season: number;
-  stats: NonNullable<PlayerProfileApiResponse["mlbStats"]>["pitching"];
-}) {
-  if (!stats) {
-    return (
-      <p className="text-sm text-[#7a8fa8]">
-        No season pitching splits in MLB Stats API for {season}.
-      </p>
-    );
-  }
-  const k = stats.strikeOuts != null ? String(stats.strikeOuts) : "—";
-  const bb = stats.baseOnBalls != null ? String(stats.baseOnBalls) : "—";
-  const rows: { label: string; value: string }[] = [
-    { label: "ERA", value: stats.era ?? "—" },
-    { label: "K", value: k },
-    { label: "BB", value: bb },
-    { label: "WHIP", value: stats.whip ?? "—" },
-  ];
-
-  return (
-    <div className="rounded-xl border border-[#d0daea] bg-[#f4f7fb] overflow-hidden">
-      <div className="px-4 py-3 border-b border-[#d0daea] bg-[#f4f7fb]">
-        <h2 className="text-sm font-semibold text-[#0f2044]">
-          Traditional · {season} pitching
-        </h2>
-      </div>
-      <table className="w-full text-sm">
-        <tbody className="divide-y divide-[#f0f4f9]">
-          {rows.map((r) => (
-            <tr key={r.label}>
-              <th
-                scope="row"
-                className="py-3 px-4 text-left font-medium text-[#7a8fa8] w-1/3"
-              >
-                {r.label}
-              </th>
-              <td className="py-3 px-4 text-right font-mono tabular-nums text-[#1e3050]">
-                {r.value}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function PitchesTable({ pitches }: { pitches: StatcastPitch[] }) {
   return (
     <div className="rounded-xl border border-[#d0daea] bg-white overflow-x-auto">
@@ -542,6 +414,7 @@ export default function PlayerProfilePage() {
   const season = profile?.mlbStats?.season ?? new Date().getFullYear();
 
   const topPitches = pitches.slice(0, 10);
+  const playerId = id ? Number.parseInt(id, 10) : NaN;
 
   const primaryCode = profile
     ? (
@@ -551,8 +424,26 @@ export default function PlayerProfilePage() {
   const isPitcherPrimary =
     profile?.mlbStats?.isPitcherPrimary ?? primaryCode === "1";
 
+  const currentBatting =
+    profile?.historicalBatting?.find((r) => r.season === season) ?? null;
+  const isTwoWay =
+    isPitcherPrimary && (currentBatting?.pa ?? 0) > 0;
+
+  const pitcherArsenal = profile?.pitcherPercentiles?.arsenal;
+  const hasPitchArsenal =
+    Array.isArray(pitcherArsenal) && pitcherArsenal.length > 0;
+  const showPitchArsenalDetail =
+    (isPitcherPrimary || isTwoWay) && hasPitchArsenal;
+
+  const pastBatting =
+    profile?.historicalBatting?.filter((r) => r.season !== season) ?? [];
+  const pastPitching =
+    profile?.historicalPitching?.filter((r) => r.season !== season) ?? [];
+  const pastFielding =
+    profile?.historicalFielding?.filter((r) => r.season !== season) ?? [];
+
   return (
-    <div className="bg-white text-[#1e3050] max-w-6xl mx-auto space-y-10">
+    <div className="bg-white text-[#1e3050] max-w-6xl mx-auto space-y-6">
       <p className="text-xs font-black tracking-tight">
         <span className="text-[#b8922a]">WAR</span>
         <span className="text-[#0f2044]">room</span>
@@ -582,59 +473,66 @@ export default function PlayerProfilePage() {
         </div>
       ) : null}
 
-      {!loading && !error && profile ? (
+      {!loading && !error && profile && Number.isFinite(playerId) ? (
         <>
-          <PersonHeader player={profile.player} />
-
-          {profile.supabasePlayer &&
-          supabaseBioHasDisplayData(profile.supabasePlayer) ? (
-            <DatabaseBioPanel row={profile.supabasePlayer} />
-          ) : null}
-
-          <HistoricalSeasonsSection
-            batting={profile.historicalBatting ?? []}
-            pitching={profile.historicalPitching ?? []}
-            fielding={profile.historicalFielding ?? []}
-          />
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-            <section className="space-y-3">
-              <h2 className="sr-only">MLB season stats</h2>
-              {isPitcherPrimary ? (
-                <PitchingTable
-                  season={season}
-                  stats={profile.mlbStats?.pitching ?? null}
-                />
-              ) : (
-                <HittingTable
-                  season={season}
-                  stats={profile.mlbStats?.hitting ?? null}
-                />
-              )}
-            </section>
-
-            <section className="space-y-3">
-              {isPitcherPrimary ? (
-                <PitcherStatcastSection
-                  pitcherPercentiles={profile.pitcherPercentiles}
-                  season={season}
-                />
-              ) : (
-                <BatterStatcastSection
-                  batterPercentiles={profile.batterPercentiles}
-                  season={season}
-                />
-              )}
-            </section>
+          <div className="space-y-3">
+            <PlayerProfileBanner
+              profile={profile}
+              playerId={playerId}
+              season={season}
+            />
+            <PlayerCurrentSeasonPanel
+              profile={profile}
+              season={season}
+              isPitcherPrimary={isPitcherPrimary}
+            />
           </div>
 
           {topPitches.length > 0 ? (
             <PitchesTable pitches={topPitches} />
           ) : (
-            <p className="text-sm text-[#7a8fa8] text-center py-8 border border-dashed border-[#d0daea] rounded-xl bg-[#f4f7fb]">
+            <p className="text-sm text-[#7a8fa8] text-center py-6 border border-dashed border-[#d0daea] rounded-xl bg-[#f4f7fb]">
               No pitch or batted-ball rows in Supabase for this player yet.
             </p>
           )}
+
+          {showPitchArsenalDetail ? (
+            <details className="rounded-xl border border-[#d0daea] bg-white group">
+              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-[#0f2044] bg-[#f4f7fb] border-b border-transparent group-open:border-[#d0daea]">
+                Pitch arsenal · by pitch type
+              </summary>
+              <div className="p-4">
+                <PitcherStatcastSection
+                  pitcherPercentiles={profile.pitcherPercentiles}
+                  season={season}
+                  showOverall={false}
+                  showArsenal
+                />
+              </div>
+            </details>
+          ) : null}
+
+          {pastBatting.length > 0 ||
+          pastPitching.length > 0 ||
+          pastFielding.length > 0 ? (
+            <HistoricalSeasonsSection
+              batting={pastBatting}
+              pitching={pastPitching}
+              fielding={pastFielding}
+            />
+          ) : null}
+
+          {profile.supabasePlayer &&
+          supabaseBioHasDisplayData(profile.supabasePlayer) ? (
+            <details className="rounded-xl border border-[#d0daea] bg-white group">
+              <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-[#0f2044] bg-[#f4f7fb] border-b border-transparent group-open:border-[#d0daea]">
+                Extended bio
+              </summary>
+              <div className="p-0">
+                <DatabaseBioPanel row={profile.supabasePlayer} />
+              </div>
+            </details>
+          ) : null}
         </>
       ) : null}
     </div>

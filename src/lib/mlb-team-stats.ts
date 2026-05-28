@@ -64,6 +64,7 @@ export function parseMlbTeamSeasonStats(
   const hitting = hs
     ? {
         avg: str(hs.avg),
+        slg: str(hs.slg),
         ops: str(hs.ops),
         homeRuns: num(hs.homeRuns),
         rbi: num(hs.rbi),
