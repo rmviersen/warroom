@@ -153,7 +153,7 @@ export async function GET() {
     queryCount("player_batting_seasons", season, "bwpr"),
     queryCount("player_batting_seasons", season, "fwpr"),
     queryCount("player_batting_seasons", season, "brwpr"),
-    queryCount("player_batting_seasons", season, "wpr"),
+    queryCount("player_season_wpr_totals", season),
     queryCount("player_pitching_seasons", season, "pwpr"),
   ]);
 

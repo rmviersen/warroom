@@ -932,3 +932,32 @@ END $$;
 Season-level totals for players are stored in ``player_batting_seasons``, ``player_pitching_seasons``, and ``player_fielding_seasons``; **per-position batting splits** (when populated) in ``player_position_seasons``; franchise seasons in ``team_batting_seasons``, ``team_pitching_seasons``, ``team_fielding_seasons``. ``player_id`` / ``team_id`` align with MLBAM ids (soft references; no FK required). Run-environment indices live in ``park_factors`` (``team_id``, ``season``): ``runs_factor`` plus optional component factors (``hr_factor``, ``hits_factor``, etc.), with a unique index for upserts and public read RLS matching other reference tables.
 
 Unique indexes support upserts (see DDL above). The player profile API exposes the three player tables as ``historicalBatting``, ``historicalPitching``, and ``historicalFielding`` (newest ``season`` first).
+
+## ``player_season_wpr_totals`` (view)
+
+Migration: ``supabase/migrations/20260528110000_create_wpr_totals_view.sql``.
+
+Read-only view that provides a unified Total WPR across all player types by FULL OUTER JOINing ``player_batting_seasons`` and ``player_pitching_seasons`` on ``(player_id, season)``. Only rows where at least one WPR component is non-null are included.
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| ``player_id`` | COALESCE(batting, pitching) | MLBAM id |
+| ``player_name`` | COALESCE(batting, pitching) | Display name |
+| ``season`` | COALESCE(batting, pitching) | Season year |
+| ``team_id`` | COALESCE(batting, pitching) | MLBAM team id |
+| ``team`` | COALESCE(batting, pitching) | Team abbreviation |
+| ``bwpr`` | ``player_batting_seasons`` | Batting WPR (null for pure pitchers) |
+| ``fwpr`` | ``player_batting_seasons`` | Fielding WPR (null for pure pitchers) |
+| ``brwpr`` | ``player_batting_seasons`` | Baserunning WPR (null for pure pitchers) |
+| ``wpr`` | ``player_batting_seasons`` | Position-player total = bwpr + fwpr + brwpr |
+| ``pwpr`` | ``player_pitching_seasons`` | Pitching WPR (null for non-pitchers) |
+| ``total_wpr`` | Computed | ``ROUND(COALESCE(wpr, 0) + COALESCE(pwpr, 0), 1)`` |
+
+**Total WPR semantics:**
+- Pure batter: ``total_wpr = wpr``
+- Pure pitcher: ``total_wpr = pwpr``
+- Two-way (e.g. Ohtani): ``total_wpr = wpr + pwpr``
+
+Views inherit the underlying tables' RLS. ``GRANT SELECT … TO anon, authenticated`` ensures PostgREST exposes the view via the anon key. Query via ``supabase.from("player_season_wpr_totals")``.
+
+**Consumer:** ``GET /api/status`` "Total WPR" health check counts rows in this view (replaces the previous ``player_batting_seasons`` + ``wpr IS NOT NULL`` count so pitchers are included).
