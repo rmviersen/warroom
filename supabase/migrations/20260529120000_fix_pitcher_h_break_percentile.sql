@@ -1,16 +1,20 @@
--- Fix H-Break percentile in get_pitcher_statcast_percentiles.
+-- Fix H-Break and V-Break percentiles to use ABS() in get_pitcher_statcast_percentiles.
 --
--- Problem: avg_h_movement (pfx_x) is negative for arm-side run on RHP and positive
--- for arm-side on LHP (Statcast sign convention).  The previous RPC compared
--- cohort.avg_h_movement <= ar.avg_h_movement (signed), which ranked high-arm-side-run
--- pitchers at LOW percentile (e.g. Joe Ryan FF −1.1 ft → 5th pct despite having more
--- movement than 95 % of the cohort).
+-- H-Break problem (avg_h_movement = pfx_x):
+--   pfx_x is negative for arm-side run on RHP and positive for arm-side on LHP.
+--   The old signed comparison (cohort <= pitcher) ranked high-arm-side-run pitchers
+--   at LOW percentile -- e.g. Joe Ryan FF -1.1 ft at 5th pct despite having more
+--   horizontal movement than 95% of the cohort.
 --
--- Fix: use ABS() on both sides so the percentile measures movement *magnitude*,
--- consistent with how calc_stuff_plus uses abs() in the formula.
+-- V-Break problem (avg_v_movement = pfx_z):
+--   pfx_z is positive for rise (FF) and negative for drop (CU, SL, FS, etc.).
+--   The old signed comparison gave low percentile to elite breaking balls with big
+--   drop -- a -0.9 ft curveball drop was punished as if it had "low" movement.
 --
--- avg_v_movement (pfx_z) uses a plain signed comparison and is correct — positive
--- means rise and more rise is always "more", so no change there.
+-- Fix (both): use ABS() on both sides so the percentile measures movement magnitude,
+--   consistent with how calc_stuff_plus uses abs() in the formula for both dimensions.
+--   More movement = higher percentile, regardless of whether it is rise or drop,
+--   arm-side run or glove-side cut.
 
 CREATE OR REPLACE FUNCTION public.get_pitcher_statcast_percentiles(
   p_pitcher_id BIGINT,
@@ -390,12 +394,8 @@ BEGIN
                         )
                       END
                   ),
-                  -- ── H-Break percentile uses ABS() ─────────────────────────────────
-                  -- avg_h_movement = pfx_x, which is negative for arm-side run on RHP
-                  -- and positive for arm-side run on LHP (Statcast sign convention).
-                  -- Using a signed comparison ranked high-movement pitchers at low
-                  -- percentile.  ABS() measures magnitude, matching how calc_stuff_plus
-                  -- treats horizontal movement.
+                  -- H-Break: ABS() so more movement magnitude = higher percentile,
+                  -- regardless of arm-side vs glove-side direction. Matches calc_stuff_plus.
                   'avg_h_movement',
                   json_build_object(
                     'raw', ar.avg_h_movement,
@@ -436,9 +436,8 @@ BEGIN
                         )
                       END
                   ),
-                  -- ── V-Break percentile stays signed ───────────────────────────────
-                  -- pfx_z is positive for rise; more rise is always "more" so signed
-                  -- comparison is correct here.
+                  -- V-Break: ABS() so more movement magnitude = higher percentile,
+                  -- regardless of rise (FF) vs drop (CU/SL/FS). Matches calc_stuff_plus.
                   'avg_v_movement',
                   json_build_object(
                     'raw', ar.avg_v_movement,
@@ -459,8 +458,8 @@ BEGIN
                               * COUNT(*) FILTER (
                                   WHERE cohort.avg_v_movement IS NOT NULL
                                     AND ar.avg_v_movement IS NOT NULL
-                                    AND cohort.avg_v_movement
-                                      <= ar.avg_v_movement
+                                    AND ABS(cohort.avg_v_movement)
+                                      <= ABS(ar.avg_v_movement)
                                 )::NUMERIC
                               / NULLIF(
                                   COUNT(*) FILTER (
